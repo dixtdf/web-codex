@@ -80,7 +80,7 @@ export default function App() {
         <div className="sidebar-status-line"><Wifi size={13} />{runtime.tunnel.phase === 'ready' ? 'Tunnel 已就绪' : runtime.tunnel.phase === 'checking' || runtime.tunnel.phase === 'starting' ? 'Tunnel 正在连接' : runtime.tunnel.phase === 'error' ? 'Tunnel 连接异常' : 'Tunnel 未连接'}</div>
       </div>
       <button className="emergency-button" onClick={() => { if (window.confirm('立即断开 ChatGPT 并停止正在运行的命令？')) void window.webCodex.emergencyStop().then(() => notify('已断开连接并停止任务')) }}><ShieldAlert size={17} />紧急停止</button>
-      <div className="sidebar-footer"><span className={`permission-dot ${runtime.privileged ? 'admin' : ''}`} />{runtime.privileged ? '管理员模式' : '标准权限'}<span>v0.1.0</span></div>
+      <div className="sidebar-footer"><span className={`permission-dot ${runtime.privileged ? 'admin' : ''}`} />{runtime.privileged ? '管理员模式' : '标准权限'}<span>v0.1.1</span></div>
     </aside>
     <main className="main-content">
       {page === 'home' && <HomePage {...pageProps} onNavigate={setPage} />}

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 - 2026-10-31
+
+### Fixed
+
+- Regenerated `package-lock.json` with all platform-specific esbuild optional dependencies so `npm ci` succeeds on Windows, macOS, and Linux release runners.
+- Updated the displayed application version to 0.1.1.
+
 ## 0.1.0 - 2026-10-31
 
 ### Added
