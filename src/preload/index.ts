@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron/renderer'
+import { contextBridge, ipcRenderer, webUtils } from 'electron/renderer'
 import type { IpcRendererEvent } from 'electron'
 import type { NavigationPage, WebCodexApi } from '../shared/api'
 import type { AppConfig, AuditLogEvent, LogServiceState, RuntimeSnapshot } from '../shared/types'
@@ -36,6 +36,11 @@ const api: WebCodexApi = {
   getLogState: () => ipcRenderer.invoke('logs:state'),
   exportLogs: () => ipcRenderer.invoke('logs:export'),
   openLogDirectory: () => ipcRenderer.invoke('logs:open-directory'),
+  listUploads: () => ipcRenderer.invoke('uploads:list'),
+  selectUploadFiles: () => ipcRenderer.invoke('dialog:select-uploads'),
+  addUploadFiles: (paths) => ipcRenderer.invoke('uploads:add', paths),
+  removeUpload: (id) => ipcRenderer.invoke('uploads:remove', id),
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
   onLogEvent: (callback) => subscribe<AuditLogEvent>('logs:event', callback),
   onLogState: (callback) => subscribe<LogServiceState>('logs:state', callback),

@@ -10,7 +10,7 @@
 
 ## Runtime composition
 
-`Runtime` owns one `ConfigStore` and constructs the domain services. `ProjectService` supplies canonical, enabled project roots to `FileService` and `ShellService`. `ProxyManager` supplies dynamic network behavior to `McpHub` and `TunnelManager`. `McpGateway` exposes project, file, shell, and downstream tools over local Streamable HTTP.
+`Runtime` owns one `ConfigStore` and constructs the domain services. `ProjectService` supplies canonical, enabled project roots to `FileService` and `ShellService`. `UploadService` keeps native attachments in an app-owned inbox and delegates bounded binary copy and safe ZIP extraction to `FileService`. `ProxyManager` supplies dynamic network behavior to `McpHub` and `TunnelManager`. `McpGateway` exposes project, file, shell, and downstream tools over local Streamable HTTP.
 
 `ActivityLogger` records local and remote events as JSONL under `logs/` in Electron's user-data directory. `AsyncLocalStorage` propagates the remote request ID and origin into shell and downstream MCP events. Writes are serialized, rotated by size, retained for 14 days, and can be exported as one JSONL file.
 

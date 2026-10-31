@@ -19,6 +19,9 @@ interface RpcResponse {
   result?: {
     protocolVersion?: string
     serverInfo?: { name: string; version: string }
+    resultType?: string
+    supportedVersions?: string[]
+    capabilities?: Record<string, unknown>
     tools?: Array<{ name: string }>
     structuredContent?: { result: unknown }
     isError?: boolean
@@ -85,6 +88,10 @@ describe('MCP Gateway HTTP transport', () => {
   })
 
   it('initializes the MCP protocol and lists all workspace tools', async () => {
+    const discovered = await rpc(0, 'server/discover', { _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28' } })
+    expect(discovered.result).toMatchObject({ resultType: 'complete', capabilities: { tools: {} } })
+    expect(discovered.result?.supportedVersions).toContain('2026-07-28')
+
     const initialized = await rpc(1, 'initialize', {
       protocolVersion: '2025-03-26',
       capabilities: {},
@@ -97,7 +104,7 @@ describe('MCP Gateway HTTP transport', () => {
     const names = listed.result?.tools?.map((tool) => tool.name) ?? []
     expect(names).toEqual(expect.arrayContaining([
       'project_list', 'project_context_get', 'file_list', 'file_read', 'file_write', 'file_patch', 'file_search',
-      'file_mkdir', 'file_move', 'file_delete', 'shell_run', 'shell_task_list', 'shell_task_get', 'shell_task_stop',
+      'file_mkdir', 'file_move', 'file_delete', 'file_read_binary', 'file_write_binary', 'file_archive_create', 'file_archive_extract', 'shell_run', 'shell_task_list', 'shell_task_get', 'shell_task_stop',
       'mcp_server_list', 'mcp_tool_list', 'mcp_tool_call'
     ]))
     expect(new Set(names).size).toBe(names.length)
@@ -113,6 +120,20 @@ describe('MCP Gateway HTTP transport', () => {
 
     const context = await callTool(13, 'project_context_get')
     expect(context).toMatchObject({ project: { id: project.id }, instructions: '', instructionFile: null })
+  })
+
+  it('transfers binary files and archives through MCP', async () => {
+    const first = Buffer.from([0, 255, 1, 2])
+    const second = Buffer.from([3, 254, 4, 253])
+    await expect(callTool(14, 'file_write_binary', { path: 'models/bracket.stl', base64: first.toString('base64') })).resolves.toMatchObject({ bytes: 4, size: 4 })
+    await expect(callTool(15, 'file_write_binary', { path: 'models/bracket.stl', base64: second.toString('base64'), offset: 4 })).resolves.toMatchObject({ bytes: 4, size: 8 })
+    const chunk = await callTool(16, 'file_read_binary', { path: 'models/bracket.stl', offset: 2, maxBytes: 4 }) as { base64: string; nextOffset: number; truncated: boolean }
+    expect(chunk.base64).toBe(Buffer.from([1, 2, 3, 254]).toString('base64'))
+    expect(chunk).toMatchObject({ nextOffset: 6, truncated: true })
+
+    await expect(callTool(17, 'file_archive_create', { sourcePath: 'models', destinationPath: 'models.zip' })).resolves.toMatchObject({ files: 1 })
+    await expect(callTool(18, 'file_archive_extract', { archivePath: 'models.zip', destinationPath: 'imported' })).resolves.toMatchObject({ files: 1, path: 'imported' })
+    expect(await readFile(join(project.path, 'imported', 'bracket.stl'))).toEqual(Buffer.concat([first, second]))
   })
 
   it('runs shell tools and exposes task retrieval through MCP', async () => {

@@ -8,6 +8,7 @@ Web Codex is an independent, cross-platform Electron workspace that lets Web Cha
 
 - Register local folders and maintain `AGENTS.md` or `agent.md` instructions.
 - Read, write, patch, search, move, and delete files inside canonical project roots.
+- Transfer STEP, STL, KiCad, and other binary files with chunked Base64/SHA-256, ZIP create/extract, and a drag-and-drop attachment inbox.
 - Run cmd, PowerShell, bash, or zsh commands with live activity, output limits, timeouts, and process-tree termination.
 - Apply optional per-project remote command policies (`allow`, prefix `allowlist`, or `deny`) without restricting local full-access tasks.
 - Audit local and remote activity with rotating JSONL logs, request/task correlation, filtering, export, and credential/content redaction.
@@ -16,7 +17,7 @@ Web Codex is an independent, cross-platform Electron workspace that lets Web Cha
 - Aggregate stdio and Streamable HTTP MCP servers as `alias__tool` tools.
 - Detect environment or system proxy settings with explicit manual/direct modes and loopback bypass.
 - Configure OpenAI Secure Tunnel with only a Tunnel ID and write-only API Key; the checksum-verified official `openai/tunnel-client` is bundled and all startup details stay internal.
-- Manage the local runtime through Home, Projects, Tunnel, MCP Connections, Activity, and Settings pages.
+- Manage the local runtime through Home, Projects, Tunnel, MCP Connections, Activity, and Settings pages with a hidden Windows/Linux native menu bar.
 - Keep the app available from a branded system tray: left-click toggles the panel, right-click opens runtime actions.
 
 ## Requirements
@@ -61,6 +62,13 @@ For `npm run test:ui`, first run `npm run build` and start `npx electron . --rem
 5. Run a real `project_list` request from ChatGPT to verify the complete connection.
 
 The local MCP endpoint defaults to `http://127.0.0.1:32180/mcp` and is never intentionally bound to a LAN or public interface. Local Bearer credentials are injected by the Tunnel client and are not entered into ChatGPT.
+
+## Binary files and attachments
+
+- Drag chat attachments, STEP, STL, KiCad, or ZIP files into **Projects → Attachment Inbox**.
+- Ask ChatGPT to list attachments, copy an attachment into a project, or extract an uploaded ZIP.
+- For local project output, use `file_archive_create` to package a directory and `file_read_binary` for chunked transfer.
+- Binary chunks include SHA-256 verification; raw Base64 and file contents are not written to audit logs.
 
 ## Documentation
 

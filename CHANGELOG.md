@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0 - 2026-11-01
+
+### Added
+
+- Chunked binary read/write with SHA-256, safe ZIP creation/extraction, and a native attachment inbox for STEP, STL, KiCad, and ZIP files.
+- Official `server/discover` compatibility and Base64 redaction in JSONL audit logs.
+- Automatic binary copy/extract from the attachment inbox without Base64 transfer.
+
+### Changed
+
+- Windows and Linux desktop windows hide the native File/Edit application menu bar.
+
+### Fixed
+
+- Linux release artifact naming no longer uses the unsupported `${target}` macro, allowing AppImage and deb packages to be published alongside Windows and macOS assets.
+
 ## 0.1.4 - 2026-10-31
 
 ### Fixed

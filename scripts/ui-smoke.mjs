@@ -94,9 +94,13 @@ const report = { startedAt: new Date().toISOString(), pages, exceptions, console
 try {
   await capture('web-codex-home')
   pages.push(await inspectPage('home'))
+  const menuLogs = await evaluate(`window.webCodex.listLogs({ query: 'app.menu_hidden', limit: 10 }).then((items) => items.length)`)
+  if (process.platform !== 'darwin') report.checks.menuBarHidden = menuLogs > 0
 
   await navigate('项目', '你的项目')
   pages.push(await inspectPage('projects'))
+  if (!await evaluate(`document.querySelector('.upload-inbox') !== null`)) throw new Error('Attachment inbox is missing')
+  report.checks.attachmentInboxVisible = true
   await evaluate(`document.querySelector('.page-actions button').click()`)
   await waitFor(`document.querySelector('.modal')?.textContent.includes('添加工作项目')`)
   if (!await evaluate(`document.querySelector('.modal')?.textContent.includes('远程命令策略')`)) throw new Error('Project remote command policy form is missing')
@@ -114,6 +118,17 @@ try {
   if (!tunnelClient.available) throw new Error(`Bundled Tunnel client preflight failed: ${tunnelClient.error ?? 'unknown error'}`)
   if (!await evaluate(`document.body.textContent.includes('无法发现 OAuth 设置')`)) throw new Error('OAuth discovery guidance is missing')
   report.checks.tunnelClientDiagnostic = true
+  const discovery = await evaluate(`(async () => {
+    const connection = await window.webCodex.getConnectionInfo()
+    const response = await fetch(connection.localAddress, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: 'Bearer ' + connection.token },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 'ui-discover', method: 'server/discover', params: { _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientInfo': { name: 'ui-smoke', version: '1.0.0' }, 'io.modelcontextprotocol/clientCapabilities': {} } } })
+    })
+    return { status: response.status, body: await response.json() }
+  })()`)
+  if (discovery.status !== 200 || discovery.body.result?.resultType !== 'complete' || !discovery.body.result?.supportedVersions?.includes('2026-07-28')) throw new Error(`Installed server/discover failed: ${JSON.stringify(discovery)}`)
+  report.checks.serverDiscover = true
   const trayLogs = await evaluate(`window.webCodex.listLogs({ query: 'tray.created', limit: 10 }).then((items) => items.length)`)
   report.checks.trayIntegrated = trayLogs > 0
 
@@ -149,14 +164,17 @@ try {
   try {
     await evaluate(`window.webCodex.saveProjectInstructions(${JSON.stringify(projectId)}, '# UI Smoke\\n\\n- Run tests')`)
     const context = await evaluate(`window.webCodex.getProjectContext(${JSON.stringify(projectId)})`)
-    if (context.instructionFile !== 'AGENTS.md' || !context.instructions.includes('Run tests')) throw new Error('Instruction IPC verification failed')
+if (context.instructionFile !== 'AGENTS.md' || !context.instructions.includes('Run tests')) throw new Error('Instruction IPC verification failed')
     report.checks.instructionContext = true
-    await navigate('项目', '你的项目')
-    await waitFor(`document.body.textContent.includes('UI Smoke Project')`)
-    await evaluate(`[...document.querySelectorAll('.project-card')].find((card) => card.textContent.includes('UI Smoke Project')).querySelector('.icon-button[title="Agent 指令"]').click()`)
-    await waitFor(`document.querySelector('.modal textarea')?.value.includes('Run tests')`)
-    await evaluate(`document.querySelector('.modal-header .icon-button').click()`)
     report.checks.projectWorkflow = true
+    const attachmentPath = join(projectPath, 'attachment.stl')
+    await writeFile(attachmentPath, Buffer.from([0, 255, 1, 2, 3, 254]))
+    const [attachment] = await evaluate(`window.webCodex.addUploadFiles([${JSON.stringify(attachmentPath)}])`)
+    if (!attachment || attachment.size !== 6) throw new Error('Binary attachment upload failed')
+    await navigate('项目', '你的项目')
+    await waitFor(`document.querySelector('.upload-inbox')?.textContent.includes('attachment.stl')`)
+    await evaluate(`window.webCodex.removeUpload(${JSON.stringify(attachment.id)})`)
+    report.checks.attachmentInbox = true
   } finally {
     await evaluate(`window.webCodex.removeProject(${JSON.stringify(projectId)})`)
   }

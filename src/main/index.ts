@@ -101,8 +101,8 @@ function createTray(current: Runtime): void {
 }
 
 function registerIpc(current: Runtime): void {
-  const categories: Record<string, LogCategory> = { config: 'config', dialog: 'app', project: 'project', gateway: 'gateway', tunnel: 'tunnel', mcp: 'mcp', shell: 'shell', connection: 'security', 'emergency-stop': 'security', app: 'app', runtime: 'app', logs: 'app' }
-  const silent = new Set(['config:get', 'runtime:get', 'logs:list', 'logs:state'])
+  const categories: Record<string, LogCategory> = { config: 'config', dialog: 'app', project: 'project', gateway: 'gateway', tunnel: 'tunnel', mcp: 'mcp', shell: 'shell', connection: 'security', 'emergency-stop': 'security', app: 'app', runtime: 'app', logs: 'app', uploads: 'file' }
+  const silent = new Set(['config:get', 'runtime:get', 'logs:list', 'logs:state', 'uploads:list'])
   const handle = <Args extends unknown[], Result>(channel: string, handler: (event: IpcMainInvokeEvent, ...args: Args) => Result | Promise<Result>): void => {
     ipcMain.handle(channel, async (event, ...args) => {
       const startedAt = Date.now()
@@ -160,6 +160,21 @@ function registerIpc(current: Runtime): void {
     tunnelId: current.store.get().tunnel.tunnelId
   }))
   handle('emergency-stop', () => current.emergencyStop())
+  handle('uploads:list', () => current.uploads.list())
+  handle('dialog:select-uploads', async () => {
+    if (!mainWindow) return []
+    const selected = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: '设计与归档文件', extensions: ['zip', 'step', 'stp', 'stl', 'kicad_pro', 'kicad_sch', 'kicad_pcb', 'kicad_mod', 'kicad_sym'] },
+        { name: '全部文件', extensions: ['*'] }
+      ]
+    })
+    if (selected.canceled || selected.filePaths.length === 0) return []
+    return current.uploads.add(selected.filePaths)
+  })
+  handle('uploads:add', (_event, paths: string[]) => current.uploads.add(paths))
+  handle('uploads:remove', (_event, id: string) => current.uploads.remove(id))
   handle('logs:list', (_event, filter?: AuditLogFilter) => current.logs.list(filter))
   handle('logs:state', () => current.logs.getState())
   handle('logs:export', async () => {
@@ -195,6 +210,7 @@ async function createWindow(): Promise<void> {
     minWidth: 1060,
     minHeight: 700,
     show: false,
+    autoHideMenuBar: true,
     backgroundColor: '#f4f6fa',
     title: 'Web Codex',
     icon: join(import.meta.dirname, '../../assets/icon-256.png'),
@@ -205,6 +221,10 @@ async function createWindow(): Promise<void> {
       sandbox: false
     }
   })
+  if (process.platform !== 'darwin') {
+    mainWindow.setMenuBarVisibility(false)
+    runtime?.logs.info({ category: 'app', action: 'app.menu_hidden', message: 'Native application menu bar hidden', origin: 'system', data: { platform: process.platform } })
+  }
   mainWindow.once('ready-to-show', () => {
     if (!runtime?.store.get().ui.startMinimized) mainWindow?.show()
   })
@@ -240,6 +260,7 @@ if (!hasLock) {
     void showMainWindow()
   })
   app.whenReady().then(async () => {
+    if (process.platform !== 'darwin') Menu.setApplicationMenu(null)
     runtime = new Runtime(join(app.getPath('userData'), 'config.json'), new ElectronSecretProtector())
     await runtime.initialize()
     runtime.privileged = await detectPrivileges()

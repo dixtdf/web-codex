@@ -150,6 +150,14 @@ export interface McpConnectionState {
   error?: string
 }
 
+export interface UploadItem {
+  id: string
+  originalName: string
+  size: number
+  createdAt: string
+  sha256: string
+}
+
 export interface SecretStorageState {
   mode: 'os-protected' | 'memory-only'
   persistent: boolean

@@ -357,4 +357,18 @@ button { border: 0; cursor: pointer; }
 .tunnel-hint-card p { margin-top: 5px; font-size: 10px; line-height: 1.6; }
 @media (max-width: 1180px) {
   .tunnel-layout { grid-template-columns: 1fr; }
+}.upload-inbox { margin-bottom: 22px; }
+.upload-inbox .card-header h3 { display: flex; align-items: center; gap: 8px; }
+.upload-dropzone { display: flex; align-items: center; justify-content: center; gap: 13px; margin: 15px 20px; padding: 20px; border: 1px dashed var(--border-strong); border-radius: 11px; color: var(--primary); background: var(--surface-soft); transition: .15s ease; }
+.upload-dropzone.dragging { border-color: var(--primary); background: var(--primary-soft); }
+.upload-dropzone strong { display: block; color: var(--text); font-size: 12px; }
+.upload-dropzone span { display: block; margin-top: 5px; color: var(--text-faint); font-size: 10px; }
+.upload-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 20px 18px; }
+.upload-item { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
+.upload-item > svg { flex: none; color: var(--primary); }
+.upload-item > div { flex: 1; min-width: 0; }
+.upload-item strong { display: block; overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.upload-item span { display: block; margin-top: 4px; color: var(--text-faint); font-size: 9px; }
+@media (max-width: 960px) {
+  .upload-list { grid-template-columns: 1fr; }
 }

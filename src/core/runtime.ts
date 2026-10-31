@@ -13,6 +13,7 @@ import { TunnelManager } from './tunnel-manager'
 import { ActivityLogger } from './activity-logger'
 import { errorMessage } from './errors'
 import type { SecretProtector } from './secret-protector'
+import { UploadService } from './upload-service'
 
 export class Runtime extends EventEmitter {
   readonly store: ConfigStore
@@ -24,6 +25,7 @@ export class Runtime extends EventEmitter {
   readonly hub: McpHub
   readonly gateway: McpGateway
   readonly tunnel: TunnelManager
+  readonly uploads: UploadService
   privileged = false
 
   constructor(configPath: string, protector?: SecretProtector) {
@@ -35,7 +37,8 @@ export class Runtime extends EventEmitter {
     this.shell = new ShellService(this.projects, this.logs)
     this.proxy = new ProxyManager(this.store, this.logs)
     this.hub = new McpHub(this.store, this.proxy, this.logs)
-    this.gateway = new McpGateway({ store: this.store, projects: this.projects, files: this.files, shell: this.shell, hub: this.hub, logger: this.logs })
+    this.uploads = new UploadService(join(dirname(configPath), 'uploads'), this.files, this.logs)
+    this.gateway = new McpGateway({ store: this.store, projects: this.projects, files: this.files, shell: this.shell, hub: this.hub, uploads: this.uploads, logger: this.logs })
     this.tunnel = new TunnelManager(this.store, this.proxy, this.logs)
     const notify = (): void => {
       this.emit('change', this.snapshot())
@@ -53,6 +56,7 @@ export class Runtime extends EventEmitter {
 
   async initialize(): Promise<void> {
     await this.store.load()
+    await this.uploads.initialize()
     await this.logs.initialize()
     this.logs.info({ category: 'app', action: 'runtime.initialized', message: 'Runtime initialized', origin: 'system', data: { platform: process.platform, arch: process.arch, versions: { electron: process.versions.electron, node: process.version } } })
     this.logs.info({ category: 'security', action: 'security.secrets_storage', message: 'Secret storage initialized', origin: 'system', data: { mode: this.store.protectionState().mode, persistent: this.store.protectionState().persistent } })

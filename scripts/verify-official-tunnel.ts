@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -68,16 +68,27 @@ try {
   const port = output.match(/MCP URL:\s*http:\/\/127\.0\.0\.1:(\d+)\/v1\/mcp\//)?.[1]
   if (!port) throw new Error(`Local control-plane port not found\n${output.slice(-4000)}`)
   const mcpUrl = `http://127.0.0.1:${port}/v1/mcp/${tunnelId}`
+  const discovery = await callMcp(mcpUrl, { jsonrpc: '2.0', id: 0, method: 'server/discover', params: { _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28' } } })
   const initialize = await callMcp(mcpUrl, { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'web-codex-verifier', version: '1.0' } } })
   const tools = await callMcp(mcpUrl, { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
   const projectList = await callMcp(mcpUrl, { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'project_list', arguments: {} } })
+  const attachmentProject = await runtime.projects.create({ path: join(directory, 'attachment-workspace') })
+  const attachmentSource = join(directory, 'sample.stl')
+  const expected = Buffer.from([0, 255, 1, 2, 3, 254])
+  await writeFile(attachmentSource, expected)
+  const [attachment] = await runtime.uploads.add([attachmentSource])
+  const copied = await callMcp(mcpUrl, { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'upload_copy', arguments: { uploadId: attachment.id, projectId: attachmentProject.id, destinationPath: './' } } })
+  const copiedBytes = await readFile(join(attachmentProject.path, 'sample.stl'))
+  if (!copiedBytes.equals(expected)) throw new Error('Attachment content differs after official tunnel copy')
   const report = {
     passed: true,
+    serverDiscoverReturned: Boolean(discovery.result),
     clientVersion: '0.0.19',
     gatewayMcpUrl: gateway.address,
     initializeServer: initialize.result && typeof initialize.result === 'object' ? (initialize.result as Record<string, unknown>).serverInfo : undefined,
     toolCount: tools.result && typeof tools.result === 'object' && Array.isArray((tools.result as Record<string, unknown>).tools) ? ((tools.result as Record<string, unknown>).tools as unknown[]).length : 0,
     projectListReturned: Boolean(projectList.result),
+    attachmentCopied: Boolean(copied.result) && copiedBytes.equals(expected),
     note: 'Verified with the official tunnel-client dev proxy and the real Web Codex Runtime; no hosted OpenAI account was used.'
   }
   await mkdir('artifacts', { recursive: true })

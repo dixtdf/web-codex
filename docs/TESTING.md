@@ -25,7 +25,7 @@ Build and start Electron with `--remote-debugging-port=9222`, then run `npm run 
 
 ## Official Tunnel integration verification
 
-`npm run test:tunnel` starts an isolated real Web Codex Runtime and the official `openai/tunnel-client` `dev proxy`. It verifies external initialize, discovery of all 17 workspace tools, and `project_list` through the official local control plane. No hosted OpenAI account is required and no secret values are included in the report at `artifacts/official-tunnel-report.json`.
+`npm run test:tunnel` starts an isolated real Web Codex Runtime and the official `openai/tunnel-client` `dev proxy`. It verifies modern `server/discover`, initialize, all 24 workspace tools, `project_list`, and byte-identical binary attachment copying through the official local control plane. No hosted OpenAI account is required and no secret values are included in the report at `artifacts/official-tunnel-report.json`.
 
 ## Coverage
 
@@ -34,6 +34,7 @@ The suite uses Vitest with V8 coverage. Core service tests target more than 90% 
 ## Local fixtures
 
 - Project and file tests create isolated temporary workspaces.
+- Binary and attachment tests use real STEP/STL/KiCad-like binary fixtures, chunked offsets, SHA-256, ZIP round trips, raw Zip Slip archives, and attachment copy/extract/remove flows.
 - Shell tests execute short real commands and terminate long-running process trees.
 - Remote command policy tests cover default migration, deny, allowlist boundaries, control-syntax bypass attempts, gateway enforcement, and unaffected local tasks.
 - Gateway tests make real HTTP requests for initialize, tools/list, tools/call, health, CORS, and authentication rejection.

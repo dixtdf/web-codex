@@ -14,6 +14,7 @@ import { McpHub } from './mcp-hub'
 import { assertCondition, errorMessage } from './errors'
 import { authorizeRemoteShell } from './remote-shell-policy'
 import type { ActivityLogger } from './activity-logger'
+import type { UploadService } from './upload-service'
 
 export interface GatewayDependencies {
   store: ConfigStore
@@ -21,6 +22,7 @@ export interface GatewayDependencies {
   files: FileService
   shell: ShellService
   hub: McpHub
+  uploads?: UploadService
   logger?: ActivityLogger
 }
 
@@ -57,6 +59,9 @@ function toolCategory(name: string): LogCategory {
   return 'gateway'
 }
 
+const workspaceInstructions = 'Web Codex exposes real local workspaces. Call project_list first, then project_context_get for the selected project and follow its AGENTS.md or agent.md instructions. Each project may restrict remote shell commands through remoteShell; denied commands must not be bypassed. Use file tools for precise edits and shell tools for builds, tests, Git, and system operations. Paths are relative to the selected project unless documented otherwise. Long-running commands can be started with wait=false and inspected with shell_task_get.'
+const supportedProtocolVersions = ['2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']
+
 function auditWorkspaceTools(server: McpServer, logger?: ActivityLogger): void {
   if (!logger) return
   const register = server.registerTool.bind(server)
@@ -78,10 +83,10 @@ function auditWorkspaceTools(server: McpServer, logger?: ActivityLogger): void {
 }
 
 export function createWorkspaceServer(dependencies: GatewayDependencies): McpServer {
-  const { projects, files, shell, hub } = dependencies
+  const { projects, files, shell, hub, uploads } = dependencies
   const server = new McpServer(
     { name: 'web-codex', version: packageJson.version },
-    { instructions: 'Web Codex exposes real local workspaces. Call project_list first, then project_context_get for the selected project and follow its AGENTS.md or agent.md instructions. Each project may restrict remote shell commands through remoteShell; denied commands must not be bypassed. Use file tools for precise edits and shell tools for builds, tests, Git, and system operations. Paths are relative to the selected project unless documented otherwise. Long-running commands can be started with wait=false and inspected with shell_task_get.' }
+    { instructions: workspaceInstructions }
   )
   auditWorkspaceTools(server, dependencies.logger)
 
@@ -162,6 +167,57 @@ export function createWorkspaceServer(dependencies: GatewayDependencies): McpSer
     description: 'Delete a project file or directory. The project root cannot be deleted.',
     inputSchema: { projectId: z.string(), path: z.string(), recursive: z.boolean().default(false) }
   }, async ({ projectId, path, recursive }) => result(await files.remove(projectId, path, recursive)))
+
+  server.registerTool('file_read_binary', {
+    title: 'Read a binary file in chunks',
+    description: 'Read a project file as base64 with byte offsets and SHA-256. Use nextOffset for subsequent chunks; each chunk is at most 4 MB.',
+    inputSchema: { projectId: z.string(), path: z.string(), offset: z.number().int().nonnegative().default(0), maxBytes: z.number().int().positive().max(4_000_000).default(1_000_000) }
+  }, async ({ projectId, path, offset, maxBytes }) => result(await files.readBinary(projectId, path, offset, maxBytes)))
+
+  server.registerTool('file_write_binary', {
+    title: 'Write a binary file chunk',
+    description: 'Write a base64 chunk to a project file. Chunks must be sequential, at most 4 MB, and match the current file size. Verify the final SHA-256 when needed.',
+    inputSchema: { projectId: z.string(), path: z.string(), base64: z.string(), offset: z.number().int().nonnegative().default(0), truncate: z.boolean().optional(), expectedSha256: z.string().optional() }
+  }, async ({ projectId, path, base64, offset, truncate, expectedSha256 }) => result(await files.writeBinary(projectId, path, base64, { offset, truncate, expectedSha256 })))
+
+  server.registerTool('file_archive_create', {
+    title: 'Create a ZIP archive',
+    description: 'Create a ZIP from a project file or directory, excluding dependencies and build output. Useful for STEP, STL, KiCad, and complete project transfer.',
+    inputSchema: { projectId: z.string(), sourcePath: z.string().default('.'), destinationPath: z.string().default('web-codex-export.zip') }
+  }, async ({ projectId, sourcePath, destinationPath }) => result(await files.createArchive(projectId, sourcePath, destinationPath)))
+
+  server.registerTool('file_archive_extract', {
+    title: 'Extract a ZIP archive safely',
+    description: 'Extract a project ZIP with entry count, size, and path traversal protections.',
+    inputSchema: { projectId: z.string(), archivePath: z.string(), destinationPath: z.string().default('.') }
+  }, async ({ projectId, archivePath, destinationPath }) => result(await files.extractArchive(projectId, archivePath, destinationPath)))
+
+  server.registerTool('upload_list', {
+    title: 'List uploaded attachments',
+    description: 'List files dropped into the Web Codex attachment inbox, including STEP, STL, KiCad, and ZIP files. No base64 transfer is needed to copy them into a project.',
+    inputSchema: {}
+  }, async () => {
+    assertCondition(uploads, 'Attachment inbox is unavailable', 'UPLOAD_UNAVAILABLE')
+    return result(await uploads.list())
+  })
+
+  server.registerTool('upload_copy', {
+    title: 'Copy an attachment into a project',
+    description: 'Copy an uploaded attachment into a project directory without base64 encoding. Use upload_list to obtain the uploadId.',
+    inputSchema: { uploadId: z.string(), projectId: z.string(), destinationPath: z.string().default('./') }
+  }, async ({ uploadId, projectId, destinationPath }) => {
+    assertCondition(uploads, 'Attachment inbox is unavailable', 'UPLOAD_UNAVAILABLE')
+    return result(await uploads.copyToProject(uploadId, projectId, destinationPath))
+  })
+
+  server.registerTool('upload_extract', {
+    title: 'Extract an uploaded ZIP into a project',
+    description: 'Safely extract an uploaded ZIP into a project directory with entry count, size, and path traversal protections.',
+    inputSchema: { uploadId: z.string(), projectId: z.string(), destinationPath: z.string().default('.') }
+  }, async ({ uploadId, projectId, destinationPath }) => {
+    assertCondition(uploads, 'Attachment inbox is unavailable', 'UPLOAD_UNAVAILABLE')
+    return result(await uploads.extractToProject(uploadId, projectId, destinationPath))
+  })
 
   server.registerTool('shell_run', {
     title: 'Run a local command',
@@ -322,6 +378,21 @@ export class McpGateway {
     const tool = !Array.isArray(body) ? body?.params?.name : undefined
     const startedAt = Date.now()
     this.dependencies.logger?.info({ category: 'gateway', action: 'gateway.request', message: `Remote MCP request: ${method}`, origin: 'remote', status: 'started', requestId, data: { method, tool, body: auditRequestBody(req.body) } })
+    if (method === 'server/discover' && !Array.isArray(body)) {
+      res.status(200).json({
+        jsonrpc: '2.0',
+        id: body?.id ?? null,
+        result: {
+          resultType: 'complete',
+          supportedVersions: supportedProtocolVersions,
+          capabilities: { tools: { listChanged: true } },
+          _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'web-codex', version: packageJson.version } },
+          instructions: workspaceInstructions
+        }
+      })
+      this.dependencies.logger?.info({ category: 'gateway', action: 'gateway.response', message: 'Remote MCP request completed: server/discover', origin: 'remote', status: 'success', requestId, durationMs: Date.now() - startedAt, data: { method, statusCode: 200, supportedVersions: supportedProtocolVersions } })
+      return
+    }
     const server = createWorkspaceServer(this.dependencies)
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
     this.activeServers.add(server)

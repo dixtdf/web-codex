@@ -41,6 +41,15 @@ function contentSummary(content: string): Record<string, unknown> {
   }
 }
 
+function binaryContentSummary(content: string): Record<string, unknown> {
+  const binary = Buffer.from(content.replace(/\s/g, ''), 'base64')
+  return {
+    omitted: true,
+    bytes: binary.length,
+    sha256: createHash('sha256').update(binary).digest('hex')
+  }
+}
+
 function auditFileOrder(filename: string): { day: string; sequence: number } {
   const match = filename.match(/^audit-(\d{4}-\d{2}-\d{2})(?:-(\d{4}))?\.jsonl$/)
   return { day: match?.[1] ?? '', sequence: Number(match?.[2] ?? 0) }
@@ -171,6 +180,7 @@ export class ActivityLogger extends EventEmitter {
     if (value === null || value === undefined) return value
     if (typeof value === 'string') {
       if (['content', 'oldText', 'newText'].includes(key)) return contentSummary(value)
+      if (key === 'base64') return binaryContentSummary(value)
       const redacted = this.redactText(value)
       return redacted.length > 8000 ? `${redacted.slice(0, 8000)}…[truncated]` : redacted
     }

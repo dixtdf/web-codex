@@ -1,4 +1,4 @@
-import type { AppConfig, AuditLogEvent, AuditLogFilter, LogServiceState, McpServerConfig, Project, ProjectContext, RemoteShellPolicy, RuntimeSnapshot, ShellKind, ShellTask } from './types'
+import type { AppConfig, AuditLogEvent, AuditLogFilter, LogServiceState, McpServerConfig, Project, ProjectContext, RemoteShellPolicy, RuntimeSnapshot, ShellKind, ShellTask, UploadItem } from './types'
 
 export interface ProjectInput {
   name?: string
@@ -58,6 +58,11 @@ export interface WebCodexApi {
   getLogState(): Promise<LogServiceState>
   exportLogs(): Promise<{ files: number; destination: string } | null>
   openLogDirectory(): Promise<void>
+  listUploads(): Promise<UploadItem[]>
+  selectUploadFiles(): Promise<UploadItem[]>
+  addUploadFiles(paths: string[]): Promise<UploadItem[]>
+  removeUpload(id: string): Promise<void>
+  getPathForFile(file: File): string
   openExternal(url: string): Promise<void>
   onLogEvent(callback: (event: AuditLogEvent) => void): () => void
   onLogState(callback: (state: LogServiceState) => void): () => void

@@ -46,6 +46,40 @@ Arguments: `projectId`, `sourcePath`, `destinationPath`. Moves an entry inside t
 
 Arguments: `projectId`, `path`, optional `recursive` (default `false`). Deletes an entry; the project root cannot be deleted.
 
+## Binary files and archives
+
+### `file_read_binary`
+
+Arguments: `projectId`, `path`, optional `offset` and `maxBytes` (default `1000000`, maximum `4000000`). Returns Base64, total size, `nextOffset`, truncation state, and SHA-256. Continue until `truncated=false` for STEP, STL, KiCad, images, and other binary files.
+
+### `file_write_binary`
+
+Arguments: `projectId`, `path`, `base64`, optional `offset`, `truncate`, and `expectedSha256`. Writes sequential chunks up to 4 MB. The first chunk normally uses offset `0`; subsequent offsets must equal the current file size. Verify the final SHA-256 after the last chunk.
+
+### `file_archive_create`
+
+Arguments: `projectId`, optional `sourcePath` (default `.`) and `destinationPath` (default `web-codex-export.zip`). Creates a ZIP from a file or directory, excluding dependency/build directories. Limited to 10000 files and 200 MB uncompressed content.
+
+### `file_archive_extract`
+
+Arguments: `projectId`, `archivePath`, optional `destinationPath` (default `.`). Extracts a ZIP with entry-count, per-entry/total-size, and path-traversal protections.
+
+## Attachment inbox
+
+Use the Projects page to select or drag local attachments into the inbox. ChatGPT can then copy them without Base64 encoding.
+
+### `upload_list`
+
+Arguments: none. Returns attachment `uploadId`, original filename, size, creation time, and SHA-256.
+
+### `upload_copy`
+
+Arguments: `uploadId`, `projectId`, optional `destinationPath` directory (default `./`). Copies the attachment into the directory using its original filename.
+
+### `upload_extract`
+
+Arguments: `uploadId`, `projectId`, optional `destinationPath` (default `.`). Safely extracts an uploaded ZIP into a project directory.
+
 ## Shells
 
 ### `shell_run`

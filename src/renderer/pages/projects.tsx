@@ -4,6 +4,7 @@ import type { Project } from '../../shared/types'
 import type { Notify } from '../App'
 import { EmptyState, Field, Modal, PageHeader, StatusPill, Toggle, errorText } from '../components/ui'
 import type { PageProps } from './types'
+import { UploadInbox } from '../components/upload-inbox'
 
 function ProjectForm({ project, onClose, notify, refresh }: { project?: Project; onClose: () => void; notify: Notify; refresh: () => Promise<void> }) {
   const [name, setName] = useState(project?.name ?? '')
@@ -123,6 +124,7 @@ export function ProjectsPage({ config, notify, refresh }: PageProps) {
 
   return <div className="page-container">
     <PageHeader eyebrow="WORKSPACES" title="你的项目" description="把需要 AI 工作的文件夹放在这里。每个项目都有独立的文件边界和 Agent 指令。" actions={<button className="button primary" onClick={() => { setEditing(undefined); setFormOpen(true) }}><Plus size={16} />添加项目</button>} />
+    <UploadInbox notify={notify} />
     {config.projects.length === 0 ? <EmptyState icon={<FolderPlus size={27} />} title="添加第一个项目" description="选择一个代码目录，ChatGPT 就能像在本机使用 Codex 一样读取、修改和运行它。" action={<button className="button primary" onClick={() => setFormOpen(true)}><FolderOpen size={16} />选择项目文件夹</button>} /> : <div className="grid-cards">
       {config.projects.map((project) => <article className="card project-card" key={project.id}>
         <div className="resource-card-top"><div className="resource-icon"><Folder size={21} /></div><div className="resource-title"><h3>{project.name}</h3><p title={project.path}>{project.path}</p></div><StatusPill tone={project.enabled ? 'success' : 'neutral'}>{project.enabled ? '可用' : '已停用'}</StatusPill></div>

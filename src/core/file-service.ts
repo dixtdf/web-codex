@@ -1,5 +1,8 @@
-import { mkdir, lstat, open, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { copyFile, mkdir, lstat, open, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { createReadStream } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import AdmZip from 'adm-zip'
 import type { FileEntry } from '../shared/types'
 import { AppError, assertCondition } from './errors'
 import { ProjectService } from './project-service'
@@ -20,6 +23,21 @@ export interface SearchMatch {
 
 const ignoredDirectories = new Set(['.git', 'node_modules', 'dist', 'out', 'release', 'coverage', '.next', '.turbo'])
 const binaryExtensions = new Set(['.exe', '.dll', '.so', '.dylib', '.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.zip', '.gz', '.7z', '.mp3', '.mp4', '.woff', '.woff2'])
+const maxArchiveBytes = 200_000_000
+
+async function hashFile(filePath: string): Promise<string> {
+  const hash = createHash('sha256')
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk as Buffer)
+  return hash.digest('hex')
+}
+
+function decodeBase64(value: string): Buffer {
+  const normalized = value.replace(/\s/g, '')
+  assertCondition(normalized.length > 0 && normalized.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(normalized), 'Invalid base64 content', 'FILE_BASE64_INVALID')
+  const buffer = Buffer.from(normalized, 'base64')
+  assertCondition(buffer.length > 0 && buffer.length <= 4_000_000 && buffer.toString('base64') === normalized, 'Invalid base64 content or chunk exceeds 4 MB', 'FILE_BASE64_INVALID')
+  return buffer
+}
 
 function inside(root: string, target: string): boolean {
   const pathFromRoot = relative(root, target)
@@ -201,5 +219,138 @@ export class FileService {
       })
     }
     return results
+  }
+
+  async readBinary(projectId: string, requestedPath: string, offset = 0, maxBytes = 1_000_000): Promise<{ path: string; base64: string; offset: number; nextOffset: number; size: number; truncated: boolean; sha256: string }> {
+    const { root, target } = await this.existingPath(projectId, requestedPath)
+    const info = await stat(target)
+    assertCondition(info.isFile(), 'Path is not a file', 'FILE_NOT_FILE')
+    assertCondition(Number.isSafeInteger(offset) && offset >= 0 && offset <= info.size, 'Invalid binary read offset', 'FILE_OFFSET_INVALID')
+    const length = Math.max(0, Math.min(Math.min(maxBytes, 4_000_000), info.size - offset))
+    const handle = await open(target, 'r')
+    let buffer: Buffer
+    try {
+      buffer = Buffer.alloc(length)
+      await handle.read(buffer, 0, length, offset)
+    } finally {
+      await handle.close()
+    }
+    return {
+      path: relative(root, target).split(sep).join('/'),
+      base64: buffer.toString('base64'),
+      offset,
+      nextOffset: offset + length,
+      size: info.size,
+      truncated: offset + length < info.size,
+      sha256: await hashFile(target)
+    }
+  }
+
+  async writeBinary(projectId: string, requestedPath: string, base64: string, options: { offset?: number; truncate?: boolean; expectedSha256?: string } = {}): Promise<{ path: string; bytes: number; size: number; sha256: string }> {
+    const content = decodeBase64(base64)
+    const offset = options.offset ?? 0
+    const truncate = options.truncate ?? offset === 0
+    const { root, target } = await this.writablePath(projectId, requestedPath)
+    let currentSize = 0
+    try {
+      currentSize = (await stat(target)).size
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+    if (truncate) currentSize = 0
+    assertCondition(Number.isSafeInteger(offset) && offset >= 0 && offset === currentSize, 'Binary chunk offset does not match the current file size', 'FILE_OFFSET_MISMATCH')
+    const handle = await open(target, truncate ? 'w' : 'a')
+    try {
+      await handle.write(content)
+    } finally {
+      await handle.close()
+    }
+    const sha256 = await hashFile(target)
+    if (options.expectedSha256 && options.expectedSha256.toLowerCase() !== sha256) {
+      throw new AppError('Binary file SHA-256 does not match the expected value', 'FILE_HASH_MISMATCH', { expected: options.expectedSha256.toLowerCase(), actual: sha256 })
+    }
+    return { path: relative(root, target).split(sep).join('/'), bytes: content.length, size: (await stat(target)).size, sha256 }
+  }
+
+  async copyBinary(projectId: string, sourceAbsolutePath: string, destinationPath: string): Promise<{ path: string; bytes: number; sha256: string }> {
+    const info = await stat(sourceAbsolutePath)
+    assertCondition(info.isFile() && info.size <= maxArchiveBytes, 'Source is not a file or exceeds 200 MB', 'FILE_LIMIT_EXCEEDED')
+    const requestedDirectory = destinationPath.trim() || '.'
+    try {
+      const existing = await this.existingPath(projectId, requestedDirectory)
+      assertCondition((await stat(existing.target)).isDirectory(), 'Attachment destination is not a directory', 'FILE_NOT_DIRECTORY')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+    const destination = await this.writablePath(projectId, join(requestedDirectory, basename(sourceAbsolutePath)))
+    await copyFile(sourceAbsolutePath, destination.target)
+    return { path: relative(destination.root, destination.target).split(sep).join('/'), bytes: info.size, sha256: await hashFile(destination.target) }
+  }
+
+  async createArchive(projectId: string, sourcePath: string, destinationPath: string): Promise<{ path: string; files: number; bytes: number; size: number; sha256: string }> {
+    const source = await this.existingPath(projectId, sourcePath)
+    const destination = await this.writablePath(projectId, destinationPath)
+    assertCondition(source.target !== destination.target, 'Archive destination cannot equal its source', 'ARCHIVE_SOURCE_INVALID')
+    const zip = new AdmZip()
+    let files = 0
+    let bytes = 0
+    const visit = async (absolute: string): Promise<void> => {
+      const entries = await readdir(absolute, { withFileTypes: true })
+      for (const entry of entries) {
+        const entryPath = join(absolute, entry.name)
+        if (entryPath === destination.target) continue
+        if (entry.isDirectory()) {
+          if (!ignoredDirectories.has(entry.name)) await visit(entryPath)
+          continue
+        }
+        if (!entry.isFile()) continue
+        const info = await stat(entryPath)
+        bytes += info.size
+        files += 1
+        assertCondition(files <= 10_000 && bytes <= maxArchiveBytes, 'Archive exceeds the 10000-file or 200 MB limit', 'ARCHIVE_LIMIT_EXCEEDED')
+        zip.addFile(relative(source.target, entryPath).split(sep).join('/'), await readFile(entryPath))
+      }
+    }
+    const info = await stat(source.target)
+    if (info.isDirectory()) await visit(source.target)
+    else {
+      bytes = info.size
+      files = 1
+      assertCondition(bytes <= maxArchiveBytes, 'Archive exceeds the 200 MB limit', 'ARCHIVE_LIMIT_EXCEEDED')
+      zip.addFile(basename(source.target), await readFile(source.target))
+    }
+    zip.writeZip(destination.target)
+    return { path: relative(destination.root, destination.target).split(sep).join('/'), files, bytes, size: (await stat(destination.target)).size, sha256: await hashFile(destination.target) }
+  }
+
+  async extractArchive(projectId: string, archivePath: string, destinationPath: string): Promise<{ path: string; files: number; bytes: number }> {
+    const archive = await this.existingPath(projectId, archivePath)
+    return this.extractArchiveFile(projectId, archive.target, destinationPath)
+  }
+
+  async extractArchiveFile(projectId: string, absoluteArchivePath: string, destinationPath: string): Promise<{ path: string; files: number; bytes: number }> {
+    const archiveInfo = await stat(absoluteArchivePath)
+    assertCondition(archiveInfo.isFile() && archiveInfo.size <= maxArchiveBytes, 'Archive is not a file or exceeds 200 MB', 'ARCHIVE_LIMIT_EXCEEDED')
+    const projectRoot = await this.projects.root(projectId)
+    const destination = destinationPath === '.' || destinationPath === '' ? { root: projectRoot, target: projectRoot } : await this.writablePath(projectId, destinationPath)
+    const zip = new AdmZip(absoluteArchivePath)
+    const entries = zip.getEntries()
+    assertCondition(entries.length <= 2000, 'Archive contains more than 2000 entries', 'ARCHIVE_LIMIT_EXCEEDED')
+    let files = 0
+    let bytes = 0
+    for (const entry of entries) {
+      const normalized = entry.entryName.replace(/\\/g, '/')
+      const segments = normalized.split('/')
+      assertCondition(!normalized.startsWith('/') && !/^[a-zA-Z]:/.test(normalized) && !segments.includes('..'), 'Archive entry leaves the destination folder', 'ARCHIVE_PATH_OUTSIDE_PROJECT')
+      if (entry.isDirectory) continue
+      bytes += entry.header.size
+      files += 1
+      assertCondition(entry.header.size <= 50_000_000 && bytes <= maxArchiveBytes, 'Archive entry or total uncompressed size exceeds the limit', 'ARCHIVE_LIMIT_EXCEEDED')
+      const relativeDestination = relative(projectRoot, resolve(destination.target, normalized))
+      const output = await this.writablePath(projectId, relativeDestination)
+      assertCondition(inside(destination.target, output.target), 'Archive entry leaves the destination folder', 'ARCHIVE_PATH_OUTSIDE_PROJECT')
+      await writeFile(output.target, entry.getData())
+    }
+    return { path: relative(projectRoot, destination.target).split(sep).join('/') || '.', files, bytes }
   }
 }

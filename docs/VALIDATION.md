@@ -11,9 +11,9 @@
 
 ### Automated service and protocol tests
 
-- `npm test`: 13 test files, 103 tests passed.
-- `npm run test:e2e`: 12 real MCP HTTP end-to-end tests passed, including JSONL remote-operation auditing, secret redaction, and remote command policy checks.
-- `npm run test:tunnel`: the real Runtime and official `openai/tunnel-client 0.0.19` local control plane completed initialize, discovery of 17 tools, and `project_list`; evidence is in `artifacts/official-tunnel-report.json`.
+- `npm test`: 15 test files, 112 tests passed.
+- `npm run test:e2e`: 13 real MCP HTTP end-to-end tests passed, including JSONL remote-operation auditing, secret redaction, remote command policy checks, and the modern `server/discover` response.
+- `npm run test:tunnel`: the real Runtime and official `openai/tunnel-client 0.0.19` local control plane completed `server/discover`, initialize, discovery of 24 tools, `project_list`, and a binary `upload_copy` with byte-identical content; evidence is in `artifacts/official-tunnel-report.json`.
 - Coverage includes projects, files, shells, downstream MCP, proxy handling, Tunnel credentials/process behavior, runtime orchestration, JSONL persistence/rotation/export, OS-protected secret storage, and error branches.
 
 ### Real Electron UI smoke test
@@ -29,11 +29,14 @@ Verified:
 - The system tray was created by the real main process, verified through persisted runtime audit logs.
 - The bundled official client passed the Tunnel diagnostic and the runtime reported `readyz = 200 ready` with the user's real credentials; no credential values are included in this record.
 - OS-protected secret storage passed in the real packaged application.
+- Windows/Linux native File/Edit menu bar is removed and hidden; the main process records an `app.menu_hidden` audit event.
 - Light/dark/system theme controls update the actual document state.
 - Project and MCP creation dialogs open and close; the project remote-command policy field renders.
 - A temporary project was created and removed through the real typed IPC bridge.
 - AGENTS.md content was saved, read back, and displayed in the instruction editor.
 - The JSONL log center loaded persisted events and expanded structured event details without runtime errors.
+- The attachment inbox uploaded and removed a real binary STL through typed IPC.
+- Installed `server/discover` returned HTTP 200 with `resultType=complete` and `2026-07-28` support; the installed log records the `ui-discover` request and successful response.
 
 ### Installed application and branding
 

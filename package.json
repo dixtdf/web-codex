@@ -1,6 +1,6 @@
 {
   "name": "web-codex",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "A Codex-grade local MCP workspace for ChatGPT",
   "type": "module",
   "main": "./out/main/index.js",
@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.0",
+    "adm-zip": "^0.6.1",
     "express": "^5.1.0",
     "lucide-react": "^0.468.0",
     "react": "^19.1.0",
@@ -43,7 +44,6 @@
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^5.0.0",
     "@vitest/coverage-v8": "^5.0.5",
-    "adm-zip": "^0.6.1",
     "electron": "^45.2.1",
     "electron-builder": "^26.0.12",
     "electron-vite": "^4.0.0",

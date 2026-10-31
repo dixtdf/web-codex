@@ -8,7 +8,7 @@ Web Codex provides Web ChatGPT with a Codex-grade local workspace while remainin
 
 1. **Desktop runtime**: Electron lifecycle, single-instance behavior, native project directory selection, external-link restrictions, and typed IPC.
 2. **Projects**: register, update, enable/disable, remove, open locally, and read or save `AGENTS.md`/`agent.md` context.
-3. **Files**: list, bounded read, UTF-8 write, exact patch, recursive search, directory creation, move, and delete inside canonical project roots.
+3. **Files**: list, bounded read, UTF-8 write, exact patch, recursive search, directory creation, move, delete, chunked binary transfer, safe ZIP create/extract, and native attachment inbox inside canonical project roots.
 4. **Shells**: cmd, PowerShell, bash, and zsh where supported; foreground/background execution, live output, retrieval, timeout, process-tree termination, and optional per-project remote command policies.
 5. **Local Gateway**: stateless Streamable HTTP MCP initialize, discovery, calls, health checks, Bearer authentication, and loopback-only listening.
 6. **MCP Hub**: stdio and Streamable HTTP discovery and forwarding with `alias__tool` names and preserved structured results.

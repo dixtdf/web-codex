@@ -8,6 +8,7 @@ Web Codex 是一个独立的跨平台 Electron 本地工作区，通过经过身
 
 - 登记本地文件夹，维护 `AGENTS.md` 或 `agent.md` 项目指令。
 - 在规范化项目根目录内读取、写入、补丁、搜索、移动和删除文件。
+- 通过分块 Base64 和 SHA-256 传输 STEP、STL、KiCad 等二进制文件，支持 ZIP 创建/解压及附件拖放收件箱。
 - 运行 cmd、PowerShell、bash 或 zsh 命令，支持实时任务状态、输出上限、超时和进程树终止。
 - 支持可选的每项目远程命令策略（全部允许、前缀白名单或禁止），同时保留本机任务的完整访问能力。
 - 使用轮转 JSONL 日志审计本机与远程操作，支持请求/任务关联、筛选、导出及凭证和文件内容脱敏。
@@ -16,7 +17,7 @@ Web Codex 是一个独立的跨平台 Electron 本地工作区，通过经过身
 - 聚合 stdio 与 Streamable HTTP MCP 服务，工具统一命名为 `alias__tool`。
 - 自动检测环境或系统代理，支持手动/直连模式，并始终绕过回环请求。
 - OpenAI Secure Tunnel 只需填写 Tunnel ID 和只写 API Key，安装包内置经过 SHA-256 校验的官方 `openai/tunnel-client`，所有启动细节均由程序管理。
-- 通过首页、项目、Tunnel、MCP 连接、任务活动和设置页面管理本地运行时。
+- 通过首页、项目、Tunnel、MCP 连接、任务活动和设置页面管理本地运行时，Windows/Linux 隐藏原生 File/Edit 菜单栏。
 - 品牌系统托盘常驻：左键切换应用面板，右键提供运行时快捷操作。
 
 ## 环境要求
@@ -61,6 +62,13 @@ npm run dist
 5. 在 ChatGPT 中执行一次真实的 `project_list`，验证完整连接。
 
 本地 MCP 端点默认为 `http://127.0.0.1:32180/mcp`，不会有意绑定局域网或公网接口。本地 Bearer 凭证由 Tunnel 客户端注入，不需要填写到 ChatGPT。
+
+## 二进制文件与附件
+
+- 将聊天附件、STEP、STL、KiCad 或 ZIP 拖入“项目 → 附件收件箱”。
+- 直接告诉 ChatGPT“列出附件”“把附件复制到项目”或“解压收件箱里的 ZIP”。
+- 项目产物可用 `file_archive_create` 打包目录，再用 `file_read_binary` 分块传输。
+- 二进制分块支持 SHA-256 校验，Base64 和文件正文不会写入审计日志。
 
 ## 文档
 

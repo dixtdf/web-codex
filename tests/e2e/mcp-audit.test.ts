@@ -47,6 +47,8 @@ describe('remote MCP JSONL audit', () => {
   it('links remote requests and shell actions while omitting secrets and file content', async () => {
     await callTool('audit-shell', 'shell_run', { command: 'node -p 42' })
     await callTool('audit-file', 'file_write', { path: 'private.txt', content: 'raw-private-content' })
+    const binaryBase64 = Buffer.from('binary-secret').toString('base64')
+    await callTool('audit-binary', 'file_write_binary', { path: 'private.bin', base64: binaryBase64 })
     await callTool('audit-downstream', 'mcp_tool_call', {
       name: 'missing__tool',
       arguments: { token: 'argument-secret', nested: { value: 'nested-secret' } }
@@ -63,6 +65,8 @@ describe('remote MCP JSONL audit', () => {
     expect(JSON.stringify(downstreamRequest?.data)).toContain('"omitted":true')
     expect(JSON.stringify(downstreamRequest?.data)).toContain('"keys":["token","nested"]')
     expect(raw).toContain('"content":{"omitted":true,"bytes":19,"sha256":')
+    expect(raw).toContain('"base64":{"omitted":true,"bytes":13,"sha256":')
+    expect(raw).not.toContain(binaryBase64)
     for (const secret of ['integration-test-token', 'raw-private-content', 'argument-secret', 'nested-secret']) {
       expect(raw).not.toContain(secret)
     }
