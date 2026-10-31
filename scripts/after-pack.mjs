@@ -3,15 +3,20 @@ import { copyFile, mkdir } from 'node:fs/promises'
 import { flipFuses, FuseV1Options, FuseVersion } from '@electron/fuses'
 import { prepareTunnelClient } from './prepare-tunnel-client.mjs'
 
-export default async function afterPack(context) {
+export function executablePathForPack(context) {
   const { appOutDir, electronPlatformName, packager } = context
   const productFilename = packager.appInfo.productFilename
-  const executableName = packager.appInfo.executableName ?? productFilename
-  const executablePath = electronPlatformName === 'win32'
+  const executableName = electronPlatformName === 'linux' ? packager.appInfo.name : packager.appInfo.executableName ?? productFilename
+  return electronPlatformName === 'win32'
     ? join(appOutDir, `${productFilename}.exe`)
     : electronPlatformName === 'darwin'
       ? join(appOutDir, `${productFilename}.app`, 'Contents', 'MacOS', productFilename)
       : join(appOutDir, executableName)
+}
+
+export default async function afterPack(context) {
+  const { appOutDir, electronPlatformName } = context
+  const executablePath = executablePathForPack(context)
   const targetArch = context.arch === 3 ? 'arm64' : context.arch === 1 ? 'x64' : context.arch
   const tunnel = await prepareTunnelClient({ platform: electronPlatformName, arch: targetArch })
   const tunnelResources = join(appOutDir, 'resources', 'tunnel-client')

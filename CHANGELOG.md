@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3 - 2026-10-31
+
+### Fixed
+
+- Resolved the Linux after-pack executable path from the package name, allowing Fuse hardening and AppImage/deb packaging to complete.
+
 ## 0.1.2 - 2026-10-31
 
 ### Fixed

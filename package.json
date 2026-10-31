@@ -1,6 +1,6 @@
 {
   "name": "web-codex",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A Codex-grade local MCP workspace for ChatGPT",
   "type": "module",
   "main": "./out/main/index.js",
