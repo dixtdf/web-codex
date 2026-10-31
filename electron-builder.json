@@ -1,0 +1,64 @@
+{
+  "appId": "dev.webcodex.app",
+  "productName": "Web Codex",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "out/**/*",
+    "assets/icon.png",
+    "assets/icon-256.png",
+    "assets/icon-32.png",
+    "package.json"
+  ],
+  "asar": true,
+  "afterPack": "scripts/after-pack.mjs",
+  "npmRebuild": false,
+  "win": {
+    "icon": "assets/icon.ico",
+    "requestedExecutionLevel": "requireAdministrator",
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64", "arm64"]
+      }
+    ],
+    "artifactName": "${productName}-${version}-Windows-${arch}.${ext}"
+  },
+  "nsis": {
+    "installerIcon": "assets/icon.ico",
+    "uninstallerIcon": "assets/icon.ico",
+    "installerHeaderIcon": "assets/icon.ico",
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true
+  },
+  "mac": {
+    "icon": "assets/icon.icns",
+    "target": [
+      {
+        "target": "dmg",
+        "arch": ["x64", "arm64"]
+      }
+    ],
+    "artifactName": "${productName}-${version}-macOS-${arch}.${ext}",
+    "category": "public.app-category.developer-tools"
+  },
+  "linux": {
+    "icon": "assets/icon.png",
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": ["x64", "arm64"]
+      },
+      {
+        "target": "deb",
+        "arch": ["x64", "arm64"]
+      }
+    ],
+    "artifactName": "${productName}-${version}-Linux-${arch}-${target}.${ext}",
+    "category": "Development"
+  },
+  "publish": null
+}
