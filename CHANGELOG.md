@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.4 - 2026-10-31
+
+### Fixed
+
+- Removed the GitHub API dependency from Tunnel client preparation; release assets and SHA-256 checksums now download directly, avoiding CI rate-limit failures.
+
 ## 0.1.3 - 2026-10-31
 
 ### Fixed

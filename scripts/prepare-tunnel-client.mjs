@@ -11,7 +11,7 @@ const execFileAsync = promisify(execFile)
 
 export const TUNNEL_CLIENT_VERSION = '0.0.19'
 const releaseBase = `https://github.com/openai/tunnel-client/releases/download/v${TUNNEL_CLIENT_VERSION}`
-const releaseApi = `https://api.github.com/repos/openai/tunnel-client/releases/tags/v${TUNNEL_CLIENT_VERSION}`
+
 
 function platformAsset(platform, arch) {
   const platformName = { win32: 'windows', darwin: 'darwin', linux: 'linux' }[platform]
@@ -56,14 +56,9 @@ export async function prepareTunnelClient({ platform = process.platform, arch = 
   const target = platformAsset(platform, arch)
   const directory = join(rootDirectory, 'resources', 'tunnel-client', target.key)
   const cached = await validCachedClient(directory, target.executable)
-  let assetUrls
   let expected
   try {
-    const release = JSON.parse((await download(releaseApi, 'application/vnd.github+json')).toString('utf8'))
-    assetUrls = new Map(release.assets.map((asset) => [asset.name, asset.url]))
-    const sumsUrl = assetUrls.get('SHA256SUMS.txt')
-    if (!sumsUrl) throw new Error('Official SHA256SUMS.txt asset not found')
-    const sums = (await download(sumsUrl)).toString('utf8')
+    const sums = (await download(`${releaseBase}/SHA256SUMS.txt`)).toString('utf8')
     expected = sums.split(/\r?\n/).map((line) => line.trim()).find((line) => line.endsWith(` ${target.asset}`) || line.endsWith(`*${target.asset}`))?.split(/\s+/)[0]
     if (!expected || !/^[a-f0-9]{64}$/i.test(expected)) throw new Error(`Official checksum not found for ${target.asset}`)
     if (cached && cached.manifest.archiveSha256 === expected) return { ...cached, cached: true, target }
@@ -74,14 +69,14 @@ export async function prepareTunnelClient({ platform = process.platform, arch = 
   if (cached && !expected) return { ...cached, cached: true, target }
 
   const assetUrl = `${releaseBase}/${target.asset}`
-  const archive = await download(assetUrls.get(target.asset))
+  const archive = await download(assetUrl)
   const archiveSha256 = sha256(archive)
   if (archiveSha256 !== expected) throw new Error(`Tunnel client checksum mismatch: expected ${expected}, received ${archiveSha256}`)
   const zip = new AdmZip(archive)
   const entry = zip.getEntries().find((item) => !item.isDirectory && basename(item.entryName) === target.executable)
   if (!entry) throw new Error(`Official archive does not contain ${target.executable}`)
   const binary = entry.getData()
-  const license = await download(assetUrls.get(target.asset.replace(/\.zip$/, '-licenses.txt')))
+  const license = await download(`${releaseBase}/${target.asset.replace(/\.zip$/, '-licenses.txt')}`)
   await mkdir(directory, { recursive: true })
   const binaryPath = join(directory, target.executable)
   const binarySha256 = sha256(binary)
