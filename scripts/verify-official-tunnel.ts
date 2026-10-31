@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -64,8 +64,8 @@ try {
   })
   proxyChild.stdout?.on('data', (chunk: Buffer) => { output += chunk.toString('utf8') })
   proxyChild.stderr?.on('data', (chunk: Buffer) => { output += chunk.toString('utf8') })
-  await waitFor(() => /control-plane route resolved.*target_host=127\.0\.0\.1:\d+/.test(output) && output.includes('mcp session initialized'), 'official MCP startup')
-  const port = output.match(/control-plane route resolved.*target_host=127\.0\.0\.1:(\d+)/)?.[1]
+  await waitFor(() => output.includes('mcp session initialized') && /MCP URL:\s*http:\/\/127\.0\.0\.1:\d+\/v1\/mcp\//.test(output), 'official MCP startup')
+  const port = output.match(/MCP URL:\s*http:\/\/127\.0\.0\.1:(\d+)\/v1\/mcp\//)?.[1]
   if (!port) throw new Error(`Local control-plane port not found\n${output.slice(-4000)}`)
   const mcpUrl = `http://127.0.0.1:${port}/v1/mcp/${tunnelId}`
   const initialize = await callMcp(mcpUrl, { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'web-codex-verifier', version: '1.0' } } })
@@ -80,6 +80,7 @@ try {
     projectListReturned: Boolean(projectList.result),
     note: 'Verified with the official tunnel-client dev proxy and the real Web Codex Runtime; no hosted OpenAI account was used.'
   }
+  await mkdir('artifacts', { recursive: true })
   await writeFile('artifacts/official-tunnel-report.json', JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report, null, 2))
 } catch (error) {

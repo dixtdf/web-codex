@@ -28,7 +28,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:e2e
-      - run: npm run dist -- --publish never
+      - run: npm run build
+      - run: npx electron-builder --publish never
       - run: npm run test:tunnel
       - uses: actions/upload-artifact@v4
         with:

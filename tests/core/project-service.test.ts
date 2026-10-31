@@ -51,7 +51,8 @@ describe('ProjectService registration', () => {
     await expect(projects.create({ path: filePath, createDirectory: false })).rejects.toMatchObject({ code: 'PROJECT_NOT_DIRECTORY' })
 
     const project = await projects.create({ path: join(temporaryDirectory, 'unique') })
-    await expect(projects.create({ path: project.path.toUpperCase() })).rejects.toMatchObject({ code: 'PROJECT_ALREADY_EXISTS' })
+    const duplicatePath = process.platform === 'win32' ? project.path.toUpperCase() : project.path
+    await expect(projects.create({ path: duplicatePath })).rejects.toMatchObject({ code: 'PROJECT_ALREADY_EXISTS' })
     await expect(projects.create({ path: join(temporaryDirectory, 'absent'), createDirectory: false })).rejects.toMatchObject({ code: 'ENOENT' })
   })
 

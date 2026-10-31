@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import packageJson from '../../package.json'
 import { ConfigStore } from '../../src/core/config-store'
 import { FileService } from '../../src/core/file-service'
 import { McpGateway } from '../../src/core/mcp-gateway'
@@ -17,7 +18,7 @@ interface RpcResponse {
   id: number | null
   result?: {
     protocolVersion?: string
-    serverInfo?: { name: string }
+    serverInfo?: { name: string; version: string }
     tools?: Array<{ name: string }>
     structuredContent?: { result: unknown }
     isError?: boolean
@@ -90,7 +91,7 @@ describe('MCP Gateway HTTP transport', () => {
       clientInfo: { name: 'vitest-client', version: '1.0.0' }
     })
     expect(initialized.error).toBeUndefined()
-    expect(initialized.result).toMatchObject({ protocolVersion: '2025-03-26', serverInfo: { name: 'web-codex' } })
+    expect(initialized.result).toMatchObject({ protocolVersion: '2025-03-26', serverInfo: { name: 'web-codex', version: packageJson.version } })
 
     const listed = await rpc(2, 'tools/list')
     const names = listed.result?.tools?.map((tool) => tool.name) ?? []

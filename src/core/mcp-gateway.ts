@@ -4,6 +4,7 @@ import express, { type Express, type Request, type Response } from 'express'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
+import packageJson from '../../package.json'
 import type { LogCategory, ServiceState } from '../shared/types'
 import { ConfigStore } from './config-store'
 import { ProjectService } from './project-service'
@@ -79,7 +80,7 @@ function auditWorkspaceTools(server: McpServer, logger?: ActivityLogger): void {
 export function createWorkspaceServer(dependencies: GatewayDependencies): McpServer {
   const { projects, files, shell, hub } = dependencies
   const server = new McpServer(
-    { name: 'web-codex', version: '0.1.0' },
+    { name: 'web-codex', version: packageJson.version },
     { instructions: 'Web Codex exposes real local workspaces. Call project_list first, then project_context_get for the selected project and follow its AGENTS.md or agent.md instructions. Each project may restrict remote shell commands through remoteShell; denied commands must not be bypassed. Use file tools for precise edits and shell tools for builds, tests, Git, and system operations. Paths are relative to the selected project unless documented otherwise. Long-running commands can be started with wait=false and inspected with shell_task_get.' }
   )
   auditWorkspaceTools(server, dependencies.logger)

@@ -4,6 +4,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import type { Tool } from '@modelcontextprotocol/sdk/types.js'
+import packageJson from '../../package.json'
 import type { McpConnectionState, McpServerConfig } from '../shared/types'
 import { AppError, errorMessage } from './errors'
 import { ConfigStore } from './config-store'
@@ -112,7 +113,7 @@ export class McpHub extends EventEmitter {
     const startedAt = Date.now()
     this.logger?.info({ category: 'mcp', action: 'mcp.connect', message: `Connecting MCP server: ${config.name}`, status: 'started', data: { serverId: id, transport: config.transport, command: config.transport === 'stdio' ? config.command : undefined, args: config.transport === 'stdio' ? config.args : undefined, url: config.transport === 'streamable-http' ? config.url : undefined } })
     await this.disconnect(id)
-    const client = new Client({ name: 'web-codex-hub', version: '0.1.0' }, { capabilities: {} })
+    const client = new Client({ name: 'web-codex-hub', version: packageJson.version }, { capabilities: {} })
     const state: McpConnectionState = { id, name: config.name, alias: config.alias, enabled: true, connected: false, toolCount: 0 }
     const connection: Connection = { client, tools: new Map(), state }
     this.connections.set(id, connection)

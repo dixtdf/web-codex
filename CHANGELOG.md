@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2 - 2026-10-31
+
+### Fixed
+
+- Made duplicate-project tests correct on case-sensitive Linux filesystems.
+- Replaced npm argument forwarding with direct `electron-builder --publish never` invocation in Windows release runners.
+- Made official Tunnel verification create its artifact directory and recognize the cross-platform `MCP URL` startup format.
+- Synchronized the UI, MCP Gateway, and downstream MCP client versions with `package.json`.
+
 ## 0.1.1 - 2026-10-31
 
 ### Fixed
