@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1 - 2026-11-01
+
+### Fixed
+
+- Added the package author email and maintainer metadata required by Linux deb packaging, completing the three-platform release matrix.
+
 ## 0.2.0 - 2026-11-01
 
 ### Added

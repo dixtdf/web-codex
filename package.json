@@ -1,10 +1,13 @@
 {
   "name": "web-codex",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A Codex-grade local MCP workspace for ChatGPT",
   "type": "module",
   "main": "./out/main/index.js",
-  "author": "dixtdf",
+  "author": {
+    "name": "dixtdf",
+    "email": "dixtdf@users.noreply.github.com"
+  },
   "license": "Apache-2.0",
   "scripts": {
     "predev": "npm run tunnel:prepare",
