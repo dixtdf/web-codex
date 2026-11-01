@@ -47,7 +47,9 @@ function mergeConfig(saved: Partial<AppConfig>): AppConfig {
     ...saved,
     version: 1,
     projects: Array.isArray(saved.projects) ? saved.projects : defaults.projects,
-    mcpServers: Array.isArray(saved.mcpServers) ? saved.mcpServers : defaults.mcpServers,
+    mcpServers: Array.isArray(saved.mcpServers) ? saved.mcpServers.map((server) => server.transport === 'stdio'
+      ? { ...server, args: server.args ?? [], env: server.env ?? {} }
+      : { ...server, headers: server.headers ?? {} }) : defaults.mcpServers,
     network: { ...defaults.network, ...saved.network },
     gateway: { ...defaults.gateway, ...saved.gateway, authToken: saved.gateway?.authToken || defaults.gateway.authToken },
     tunnel: { ...defaults.tunnel, ...saved.tunnel, apiKey: saved.tunnel?.apiKey ?? defaults.tunnel.apiKey },
@@ -127,6 +129,12 @@ export class ConfigStore extends EventEmitter {
     if (config.tunnel && typeof config.tunnel.apiKey === 'string') config.tunnel.apiKey = await this.unprotectValue(config.tunnel.apiKey)
     if (Array.isArray(config.mcpServers)) {
       for (const server of config.mcpServers) {
+        if (server.transport === 'stdio') {
+          server.args ??= []
+          server.env ??= {}
+        } else {
+          server.headers ??= {}
+        }
         const values = server.transport === 'stdio' ? server.env : server.headers
         for (const key of Object.keys(values)) values[key] = await this.unprotectValue(values[key])
       }

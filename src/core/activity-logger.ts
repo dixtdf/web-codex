@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash, randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import type { AuditLogEvent, AuditLogFilter, LogCategory, LogLevel, LogOrigin, LogServiceState, LogStatus } from '../shared/types'
 import { errorMessage } from './errors'
 
@@ -121,6 +121,8 @@ export class ActivityLogger extends EventEmitter {
   record(input: LogEventInput): AuditLogEvent {
     const context = this.context.getStore()
     const level = input.level ?? 'info'
+    const requestId = input.requestId ?? context?.requestId
+    const redactIdentifier = (value: string | undefined): string | undefined => value === undefined ? undefined : this.redactText(value)
     const event: AuditLogEvent = {
       id: randomUUID(),
       timestamp: new Date().toISOString(),
@@ -130,9 +132,9 @@ export class ActivityLogger extends EventEmitter {
       message: this.redactText(input.message),
       origin: input.origin ?? context?.origin ?? 'local',
       status: input.status ?? (level === 'error' ? 'error' : 'info'),
-      requestId: input.requestId ?? context?.requestId,
-      projectId: input.projectId,
-      taskId: input.taskId,
+      requestId: redactIdentifier(requestId),
+      projectId: redactIdentifier(input.projectId),
+      taskId: redactIdentifier(input.taskId),
       durationMs: input.durationMs,
       data: input.data === undefined ? undefined : this.sanitize(input.data)
     }
@@ -175,6 +177,12 @@ export class ActivityLogger extends EventEmitter {
   async exportTo(destination: string): Promise<{ files: number; destination: string }> {
     await this.flush()
     const files = await this.logFiles()
+    const normalizedDestination = resolve(destination)
+    const overwritesActiveLog = files.some((file) => {
+      const candidate = resolve(join(this.directory, file))
+      return process.platform === 'win32' ? candidate.toLowerCase() === normalizedDestination.toLowerCase() : candidate === normalizedDestination
+    })
+    if (overwritesActiveLog) throw new Error('Export destination must not be an active audit log file')
     const contents = await Promise.all(files.map((file) => readFile(join(this.directory, file), 'utf8')))
     await mkdir(dirname(destination), { recursive: true })
     await writeFile(destination, contents.map((content) => content.endsWith('\n') ? content : `${content}\n`).join(''), { encoding: 'utf8', mode: 0o600 })

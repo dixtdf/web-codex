@@ -302,6 +302,16 @@ describe('MCP Gateway HTTP transport', () => {
     await expect(gateway.start()).rejects.toThrow('MCP Gateway must listen on a loopback address')
   })
 
+  it('shares concurrent startup attempts instead of returning a premature stopped state', async () => {
+    await gateway.stop()
+
+    const [first, second] = await Promise.all([gateway.start(), gateway.start()])
+
+    expect(first).toMatchObject({ running: true, address: expect.any(String) })
+    expect(second).toEqual(first)
+    expect(gateway.getState().running).toBe(true)
+  })
+
   it('can retry startup after a port conflict is resolved', async () => {
     await gateway.stop()
     const blocker = createServer()

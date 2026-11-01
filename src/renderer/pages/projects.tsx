@@ -14,8 +14,12 @@ function ProjectForm({ project, onClose, notify, refresh }: { project?: Project;
   const [busy, setBusy] = useState(false)
 
   const chooseFolder = async (): Promise<void> => {
-    const selected = await window.webCodex.selectDirectory()
-    if (selected) setPath(selected)
+    try {
+      const selected = await window.webCodex.selectDirectory()
+      if (selected) setPath(selected)
+    } catch (error) {
+      notify(errorText(error), 'error')
+    }
   }
 
   const submit = async (event: FormEvent): Promise<void> => {
@@ -129,7 +133,7 @@ export function ProjectsPage({ config, notify, refresh }: PageProps) {
       {config.projects.map((project) => <article className="card project-card" key={project.id}>
         <div className="resource-card-top"><div className="resource-icon"><Folder size={21} /></div><div className="resource-title"><h3>{project.name}</h3><p title={project.path}>{project.path}</p></div><StatusPill tone={project.enabled ? 'success' : 'neutral'}>{project.enabled ? '可用' : '已停用'}</StatusPill></div>
         <div className="resource-meta"><span><FileText size={14} />AGENTS.md / agent.md</span><span><ShieldCheck size={14} />{project.remoteShell?.mode === 'deny' ? '远程命令已禁止' : project.remoteShell?.mode === 'allowlist' ? `远程命令允许 ${project.remoteShell.allowedPrefixes.length} 个前缀` : '远程命令默认允许'}</span><span>ID · {project.id.slice(0, 8)}</span></div>
-        <div className="resource-actions"><Toggle checked={project.enabled} onChange={(enabled) => void toggle(project, enabled)} label={project.enabled ? '允许访问' : '已停用'} /><span className="spacer" /><button className="icon-button" title="打开文件夹" onClick={() => void window.webCodex.openProject(project.id)}><FolderOpen size={17} /></button><button className="icon-button" title="Agent 指令" onClick={() => setInstructions(project)}><FileText size={17} /></button><button className="icon-button" title="编辑项目" onClick={() => { setEditing(project); setFormOpen(true) }}><Pencil size={16} /></button><button className="icon-button danger" title="移除项目" onClick={() => setDeleting(project)}><Trash2 size={16} /></button></div>
+        <div className="resource-actions"><Toggle checked={project.enabled} onChange={(enabled) => void toggle(project, enabled)} label={project.enabled ? '允许访问' : '已停用'} /><span className="spacer" /><button className="icon-button" title="打开文件夹" onClick={() => void window.webCodex.openProject(project.id).catch((error) => notify(errorText(error), 'error'))}><FolderOpen size={17} /></button><button className="icon-button" title="Agent 指令" onClick={() => setInstructions(project)}><FileText size={17} /></button><button className="icon-button" title="编辑项目" onClick={() => { setEditing(project); setFormOpen(true) }}><Pencil size={16} /></button><button className="icon-button danger" title="移除项目" onClick={() => setDeleting(project)}><Trash2 size={16} /></button></div>
       </article>)}
     </div>}
     {formOpen && <ProjectForm project={editing} onClose={() => setFormOpen(false)} notify={notify} refresh={refresh} />}

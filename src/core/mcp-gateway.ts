@@ -607,6 +607,7 @@ export function createWorkspaceServer(dependencies: GatewayDependencies): McpSer
 
 export class McpGateway {
   private httpServer?: Server
+  private startPromise?: Promise<ServiceState>
   private readonly activeServers = new Set<McpServer>()
   private state: ServiceState = { running: false, detail: 'Stopped' }
 
@@ -617,6 +618,17 @@ export class McpGateway {
   }
 
   async start(): Promise<ServiceState> {
+    if (this.startPromise) return this.startPromise
+    const starting = this.startInternal()
+    this.startPromise = starting
+    try {
+      return await starting
+    } finally {
+      if (this.startPromise === starting) this.startPromise = undefined
+    }
+  }
+
+  private async startInternal(): Promise<ServiceState> {
     if (this.httpServer) return this.getState()
     const settings = this.dependencies.store.get().gateway
     if (!['127.0.0.1', 'localhost', '::1'].includes(settings.host)) {
@@ -649,6 +661,8 @@ export class McpGateway {
   }
 
   async stop(): Promise<void> {
+    const starting = this.startPromise
+    if (starting) await starting.catch(() => undefined)
     const server = this.httpServer
     this.httpServer = undefined
     await Promise.allSettled([...this.activeServers].map((item) => item.close()))

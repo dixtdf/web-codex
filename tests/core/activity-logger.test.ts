@@ -76,6 +76,21 @@ describe('ActivityLogger JSONL persistence', () => {
     expect(logger.getState()).toEqual({ directory, persistent: true, retentionDays: 14, lastError: undefined })
   })
 
+  it('redacts credentials carried by correlation identifiers', async () => {
+    const logger = new ActivityLogger(directory)
+    await logger.initialize()
+    logger.runWithContext({ origin: 'remote', requestId: 'Bearer request-secret' }, () => {
+      logger.info({ category: 'gateway', action: 'gateway.request', message: 'Request', projectId: 'TOKEN=project-secret', taskId: 'sk-tasksecret' })
+    })
+    await logger.flush()
+
+    const event = logger.list()[0]
+    expect(event.requestId).toBe('Bearer [REDACTED]')
+    expect(event.projectId).toBe('TOKEN=[REDACTED]')
+    expect(event.taskId).toBe('[REDACTED]')
+    expect(await readAuditText()).not.toMatch(/request-secret|project-secret|tasksecret/)
+  })
+
   it('scrubs previously persisted ChatGPT identity, session, location, and timezone metadata', async () => {
     await mkdir(directory, { recursive: true })
     const legacy = auditEvent('gateway.request')
@@ -218,6 +233,20 @@ describe('ActivityLogger JSONL persistence', () => {
     await expect(logger.exportTo(destination)).resolves.toEqual({ files: files.length, destination })
     const exported = (await readFile(destination, 'utf8')).trim().split('\n').map((line) => JSON.parse(line) as AuditLogEvent)
     expect(exported.map((event) => event.action)).toEqual(Array.from({ length: 8 }, (_, index) => `event.${index}`))
+  })
+
+  it('refuses to overwrite an active audit file during export', async () => {
+    const logger = new ActivityLogger(directory)
+    await logger.initialize()
+    logger.info({ category: 'app', action: 'original.event', message: 'Original audit event' })
+    await logger.flush()
+    const [activeFile] = await readdir(directory)
+    const destination = join(directory, activeFile)
+    const original = await readFile(destination, 'utf8')
+
+    await expect(logger.exportTo(destination)).rejects.toThrow('active audit log file')
+
+    await expect(readFile(destination, 'utf8')).resolves.toBe(original)
   })
 
   it('removes expired files and ignores malformed lines while loading recent events', async () => {

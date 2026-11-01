@@ -68,6 +68,21 @@ describe('ConfigStore', () => {
     expect(store.get().gateway.port).toBe(41000)
   })
 
+  it('restores optional MCP fields omitted by legacy configurations', async () => {
+    await writeFile(filePath, JSON.stringify({
+      mcpServers: [
+        { id: 'legacy-stdio', name: 'Legacy stdio', alias: 'legacy_stdio', enabled: true, transport: 'stdio', command: 'node' },
+        { id: 'legacy-http', name: 'Legacy HTTP', alias: 'legacy_http', enabled: true, transport: 'streamable-http', url: 'https://example.com/mcp' }
+      ]
+    }))
+
+    const loaded = await new ConfigStore(filePath, protector).load()
+
+    expect(loaded.mcpServers[0]).toMatchObject({ transport: 'stdio', args: [], env: {} })
+    expect(loaded.mcpServers[1]).toMatchObject({ transport: 'streamable-http', headers: {} })
+    await expect(new ConfigStore(filePath, protector).load()).resolves.toEqual(loaded)
+  })
+
   it('serializes queued updates, flushes them, and notifies subscribers', async () => {
     const store = new ConfigStore(filePath, protector)
     await store.load()

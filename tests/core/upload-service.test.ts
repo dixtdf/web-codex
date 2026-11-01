@@ -60,6 +60,15 @@ describe('UploadService attachment inbox', () => {
     expect(await readFile(join(project.path, 'imported', 'project', 'board.kicad_pcb'), 'utf8')).toBe('(kicad_pcb)')
   })
 
+  it('rolls back the whole batch when any selected attachment fails', async () => {
+    const source = join(temporaryDirectory, 'valid.stl')
+    await writeFile(source, Buffer.from([1, 2, 3]))
+
+    await expect(uploads.add([source, join(temporaryDirectory, 'missing.stl')])).rejects.toMatchObject({ code: 'ENOENT' })
+
+    expect(await uploads.list()).toEqual([])
+  })
+
   it('validates IDs, ZIP types, and file selection', async () => {
     await expect(uploads.add([])).rejects.toMatchObject({ code: 'UPLOAD_COUNT_INVALID' })
     await expect(uploads.copyToProject('../escape', project.id, '.')).rejects.toMatchObject({ code: 'UPLOAD_NOT_FOUND' })

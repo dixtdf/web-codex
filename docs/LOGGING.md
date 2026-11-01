@@ -19,7 +19,7 @@ logs/audit-YYYY-MM-DD-0001.jsonl
 - Rotate when the current file exceeds 10 MB.
 - Retain files for 14 days; expired files are removed during initialization.
 - Keep up to 1500 recent events in memory and display up to 500 matching events.
-- Export concatenates every retained file in chronological file order, not only the recent in-memory subset.
+- Export concatenates every retained file in chronological file order, not only the recent in-memory subset. An export cannot overwrite an active audit log file.
 - The log center displays persistence errors and recovery state.
 
 ## Event schema
@@ -77,7 +77,7 @@ High-frequency configuration/runtime reads and log-center queries are deliberate
 
 Before an event is emitted or persisted:
 
-- Gateway tokens, configured downstream secrets, Bearer credentials, common API keys, passwords, JWTs, OAuth URL codes, and URL userinfo are replaced with `[REDACTED]`.
+- Gateway tokens, configured downstream secrets, Bearer credentials, common API keys, passwords, JWTs, OAuth URL codes, and URL userinfo are replaced with `[REDACTED]`. Correlation identifiers receive the same credential redaction.
 - OpenAI Tunnel IDs matching the `tunnel_` pattern and `tunnel_id`/`TUNNEL_ID` key/value forms are replaced with `[REDACTED]` in new events and in retained JSONL files scrubbed during initialization.
 - ChatGPT request metadata keys beginning with `openai/` and timezone fields are replaced with `[REDACTED]`; retained files from older builds are scrubbed during initialization.
 - Sensitive object keys, request headers, and environment-variable objects are redacted.

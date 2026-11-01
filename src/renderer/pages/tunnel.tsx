@@ -65,6 +65,10 @@ export function TunnelPage({ config, runtime, notify, refresh, onNavigate }: Pag
     }
   }
 
+  const openExternal = (url: string): void => {
+    void window.webCodex.openExternal(url).catch((error) => notify(errorText(error), 'error'))
+  }
+
   const submit = (event: FormEvent): void => {
     event.preventDefault()
     void save(false)
@@ -85,7 +89,7 @@ export function TunnelPage({ config, runtime, notify, refresh, onNavigate }: Pag
         <div className="card-header"><div><h3>OpenAI Tunnel 凭证</h3><p>密钥只保存在本机，不会显示在日志或发送给 ChatGPT。</p></div><KeyRound size={18} /></div>
         <div className="card-body">
           <Field label="Tunnel ID" hint="在 OpenAI Platform 的 Tunnels 页面创建并复制完整 Tunnel ID。"><input className="mono" value={tunnelId} onChange={(event) => setTunnelId(event.target.value)} placeholder="tunnel_..." autoComplete="off" /></Field>
-          <div className="external-actions"><button type="button" className="button soft small" onClick={() => void window.webCodex.openExternal('https://platform.openai.com/settings/organization/tunnels')}><ExternalLink size={14} />打开 Tunnels 页面</button><button type="button" className="button soft small" onClick={() => void window.webCodex.openExternal('https://platform.openai.com/settings/organization/api-keys')}><ExternalLink size={14} />创建 API Key</button></div>
+          <div className="external-actions"><button type="button" className="button soft small" onClick={() => openExternal('https://platform.openai.com/settings/organization/tunnels')}><ExternalLink size={14} />打开 Tunnels 页面</button><button type="button" className="button soft small" onClick={() => openExternal('https://platform.openai.com/settings/organization/api-keys')}><ExternalLink size={14} />创建 API Key</button></div>
           <Field label="API Key" hint={hasSavedKey ? '已保存。留空保持不变；填写新 Key 可替换。建议使用仅有 Tunnels: Read 与 Tunnels: Use 权限的受限 Key。' : '输入可以访问此 Tunnel 的 Restricted API Key。'}>
             <div className="secret-input"><input type={showKey ? 'text' : 'password'} value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={hasSavedKey ? '已保存，留空保持不变' : 'sk-...'} autoComplete="new-password" /><button type="button" className="icon-button" onClick={() => setShowKey(!showKey)} aria-label={showKey ? '隐藏 API Key' : '显示 API Key'}>{showKey ? <EyeOff size={17} /> : <Eye size={17} />}</button></div>
           </Field>
@@ -100,7 +104,7 @@ export function TunnelPage({ config, runtime, notify, refresh, onNavigate }: Pag
           <div className="card-body">
             <div className="connection-box"><label>TUNNEL ID</label><div className="connection-value mono">{tunnelId || '填写后显示'}</div><CopyButton value={tunnelId} label="复制 Tunnel ID" className="button secondary small" /></div>
             <ol className="tunnel-steps"><li>打开 ChatGPT Plugins，选择“添加自定义 MCP 服务”。</li><li>连接方式选择 <strong>Tunnel</strong>，粘贴上面的 Tunnel ID。</li><li>Authentication 选择 <strong>No Auth</strong>，创建插件并扫描工具。</li></ol>
-            <button type="button" className="button secondary" onClick={() => void window.webCodex.openExternal('https://chatgpt.com/#settings/Connectors')}><ExternalLink size={15} />打开 ChatGPT Plugins</button>
+            <button type="button" className="button secondary" onClick={() => openExternal('https://chatgpt.com/#settings/Connectors')}><ExternalLink size={15} />打开 ChatGPT Plugins</button>
           </div>
         </section>
 

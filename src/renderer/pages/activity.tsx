@@ -75,7 +75,7 @@ function LogCenter({ notify }: { notify: Notify }) {
       <select aria-label="日志来源" value={origin} onChange={(event) => setOrigin(event.target.value as AuditLogFilter['origin'])}><option value="all">全部来源</option><option value="remote">远程操作</option><option value="local">本机操作</option><option value="system">系统事件</option></select>
       <select aria-label="日志级别" value={level} onChange={(event) => setLevel(event.target.value as AuditLogFilter['level'])}><option value="all">全部级别</option>{Object.entries(levelLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
       <button className="icon-button" title="刷新日志" onClick={() => void loadLogs()}><RefreshCw size={17} /></button>
-      <button className="button secondary" onClick={() => void window.webCodex.openLogDirectory()}><FolderOpen size={16} />打开目录</button>
+      <button className="button secondary" onClick={() => void window.webCodex.openLogDirectory().catch((error) => notify(errorText(error), 'error'))}><FolderOpen size={16} />打开目录</button>
       <button className="button secondary" disabled={exportingDiagnostics} onClick={() => void exportDiagnostics()}><FileJson size={16} />{exportingDiagnostics ? '正在生成…' : '导出诊断'}</button>
       <button className="button primary" disabled={exporting} onClick={() => void exportLogs()}><Download size={16} />{exporting ? '正在导出…' : '导出 JSONL'}</button>
     </div>

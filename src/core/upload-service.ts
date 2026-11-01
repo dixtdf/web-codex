@@ -39,20 +39,29 @@ export class UploadService {
   async add(sourcePaths: string[]): Promise<UploadItem[]> {
     assertCondition(sourcePaths.length > 0 && sourcePaths.length <= 20, 'Select between 1 and 20 files', 'UPLOAD_COUNT_INVALID')
     const added: UploadItem[] = []
-    for (const sourcePath of sourcePaths) {
-      const info = await stat(sourcePath)
-      assertCondition(info.isFile(), 'Only regular files can be uploaded', 'UPLOAD_NOT_FILE')
-      assertCondition(info.size <= 200_000_000, 'Each upload must be 200 MB or smaller', 'UPLOAD_LIMIT_EXCEEDED')
-      const originalName = basename(sourcePath).replace(/[\x00-\x1f]/g, '_') || 'upload.bin'
-      const id = randomUUID()
-      const directory = join(this.directory, id)
-      await mkdir(directory, { recursive: true })
-      const destination = join(directory, originalName)
-      await copyFile(sourcePath, destination)
-      const item: UploadItem = { id, originalName, size: info.size, createdAt: new Date().toISOString(), sha256: await hashFile(destination) }
-      await writeFile(join(directory, 'metadata.json'), JSON.stringify(item, null, 2), { mode: 0o600 })
-      this.logger?.info({ category: 'file', action: 'upload.added', message: `Attachment uploaded: ${originalName}`, data: { uploadId: id, originalName, size: item.size, sha256: item.sha256 } })
-      added.push(item)
+    const createdDirectories: string[] = []
+    try {
+      for (const sourcePath of sourcePaths) {
+        const info = await stat(sourcePath)
+        assertCondition(info.isFile(), 'Only regular files can be uploaded', 'UPLOAD_NOT_FILE')
+        assertCondition(info.size <= 200_000_000, 'Each upload must be 200 MB or smaller', 'UPLOAD_LIMIT_EXCEEDED')
+        const originalName = basename(sourcePath).replace(/[\x00-\x1f]/g, '_') || 'upload.bin'
+        const id = randomUUID()
+        const directory = join(this.directory, id)
+        await mkdir(directory, { recursive: true })
+        createdDirectories.push(directory)
+        const destination = join(directory, originalName)
+        await copyFile(sourcePath, destination)
+        const item: UploadItem = { id, originalName, size: info.size, createdAt: new Date().toISOString(), sha256: await hashFile(destination) }
+        await writeFile(join(directory, 'metadata.json'), JSON.stringify(item, null, 2), { mode: 0o600 })
+        added.push(item)
+      }
+    } catch (error) {
+      await Promise.allSettled(createdDirectories.map((directory) => rm(directory, { recursive: true, force: true })))
+      throw error
+    }
+    for (const item of added) {
+      this.logger?.info({ category: 'file', action: 'upload.added', message: `Attachment uploaded: ${item.originalName}`, data: { uploadId: item.id, originalName: item.originalName, size: item.size, sha256: item.sha256 } })
     }
     return added
   }
