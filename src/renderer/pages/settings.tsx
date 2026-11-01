@@ -31,7 +31,11 @@ export function SettingsPage({ config, runtime, notify, refresh }: PageProps) {
   }
 
   const changeTheme = async (theme: 'system' | 'light' | 'dark'): Promise<void> => {
-    await window.webCodex.updateConfig({ ui: { ...config.ui, theme } })
+    try {
+      await window.webCodex.updateConfig({ ui: { ...config.ui, theme } })
+    } catch (error) {
+      notify(errorText(error), 'error')
+    }
   }
 
   return <div className="page-container">
@@ -53,6 +57,6 @@ export function SettingsPage({ config, runtime, notify, refresh }: PageProps) {
       <div className="page-actions" style={{ justifyContent: 'flex-end' }}><button className="button primary large" disabled={busy}><Save size={16} />{busy ? '正在保存…' : '保存设置'}</button></div>
     </form>
 
-    <section className="card settings-section danger-zone" style={{ marginTop: 22, maxWidth: 900 }}><div className="card-body"><div className="settings-inline"><div><h4>紧急停止</h4><p>立即断开 Tunnel 和本地 MCP，并停止正在运行的所有终端任务。</p></div><button className="button danger" onClick={() => { if (window.confirm('确认断开 ChatGPT 并停止所有任务？')) void window.webCodex.emergencyStop().then(() => notify('已安全停止')) }}><Unplug size={16} /><ShieldAlert size={16} />立即全部停止</button></div></div></section>
+    <section className="card settings-section danger-zone" style={{ marginTop: 22, maxWidth: 900 }}><div className="card-body"><div className="settings-inline"><div><h4>紧急停止</h4><p>立即断开 Tunnel 和本地 MCP，并停止正在运行的所有终端任务。</p></div><button className="button danger" onClick={() => { if (window.confirm('确认断开 ChatGPT 并停止所有任务？')) void window.webCodex.emergencyStop().then(() => notify('已安全停止')).catch((error) => notify(errorText(error), 'error')) }}><Unplug size={16} /><ShieldAlert size={16} />立即全部停止</button></div></div></section>
   </div>
 }

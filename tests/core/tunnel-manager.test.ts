@@ -179,6 +179,36 @@ describe('TunnelManager process lifecycle', () => {
     expect(tunnel.getState()).toMatchObject({ running: false, phase: 'disconnected', detail: 'Not connected' })
   })
 
+  it('deduplicates concurrent starts and lets stop finish an in-flight startup', async () => {
+    let releaseDoctor!: () => void
+    const doctorGate = new Promise<void>((resolve) => {
+      releaseDoctor = resolve
+    })
+    execFileMock.mockImplementation(async (_command: string, args: string[]) => {
+      if (args[0] === 'run' && args[1] === '--help') return { stdout: '--mcp.server-url --control-plane.tunnel-id --health.url-file', stderr: '' }
+      if (args[0] === 'init') return { stdout: 'Created', stderr: '' }
+      if (args[0] === 'doctor') {
+        await doctorGate
+        return { stdout: 'Ready', stderr: '' }
+      }
+      throw new Error('Unexpected command')
+    })
+    const child = fakeChild(() => queueMicrotask(() => child.emit('spawn')))
+
+    const first = tunnel.start()
+    const second = tunnel.start()
+    const stopping = tunnel.stop()
+    releaseDoctor()
+    await expect(first).resolves.toMatchObject({ running: true })
+    await expect(second).resolves.toMatchObject({ running: true })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    child.emit('close', 0, null)
+    await stopping
+
+    expect(spawnMock.mock.calls.filter((call) => call[0] === clientPath)).toHaveLength(1)
+    expect(tunnel.getState()).toMatchObject({ running: false, phase: 'disconnected' })
+  })
+
   it('reports child exit codes without keeping a connection', async () => {
     store.update({ tunnel: { ...store.get().tunnel, publicUrl: 'https://configured.example.test/mcp' } })
     const child = fakeChild(() => queueMicrotask(() => {

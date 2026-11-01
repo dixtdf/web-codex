@@ -307,7 +307,9 @@ if (!hasLock) {
     quitting = true
     const forcedExit = setTimeout(() => app.exit(0), 10_000)
     forcedExit.unref()
-    void runtime.stop().finally(() => {
+    void runtime.stop().catch((error: unknown) => {
+      console.error('Runtime shutdown failed', error)
+    }).finally(() => {
       clearTimeout(forcedExit)
       app.quit()
     })

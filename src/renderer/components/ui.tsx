@@ -1,4 +1,4 @@
-import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { Check, Copy, X } from 'lucide-react'
 
 export function errorText(error: unknown): string {
@@ -31,12 +31,28 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
 
 export function CopyButton({ value, label = '复制', className = 'button secondary' }: { value: string; label?: string; className?: string }) {
   const [copied, setCopied] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const timer = useRef<number | undefined>(undefined)
+  useEffect(() => () => {
+    if (timer.current !== undefined) window.clearTimeout(timer.current)
+  }, [])
   const copy = async (): Promise<void> => {
-    await navigator.clipboard.writeText(value)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1800)
+    if (timer.current !== undefined) window.clearTimeout(timer.current)
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      setFailed(false)
+    } catch {
+      setCopied(false)
+      setFailed(true)
+    }
+    timer.current = window.setTimeout(() => {
+      timer.current = undefined
+      setCopied(false)
+      setFailed(false)
+    }, 1800)
   }
-  return <button className={className} onClick={() => void copy()} disabled={!value}>{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? '已复制' : label}</button>
+  return <button className={className} onClick={() => void copy()} disabled={!value}>{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? '已复制' : failed ? '复制失败' : label}</button>
 }
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {

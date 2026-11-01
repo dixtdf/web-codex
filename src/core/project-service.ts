@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, realpath, stat } from 'node:fs/promises'
-import { basename, resolve } from 'node:path'
+import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import type { Project, ProjectContext, RemoteShellPolicy } from '../shared/types'
 import { AppError, assertCondition, errorMessage } from './errors'
 import { ConfigStore } from './config-store'
@@ -114,11 +114,28 @@ export class ProjectService {
     return realpath(project.path)
   }
 
+  private async instructionPath(project: Project, filename: string): Promise<string> {
+    const root = await realpath(project.path)
+    const target = resolve(root, filename)
+    const assertInside = (candidate: string): void => {
+      const pathFromRoot = relative(root, candidate)
+      assertCondition(pathFromRoot === '' || (!pathFromRoot.startsWith(`..${sep}`) && pathFromRoot !== '..' && !isAbsolute(pathFromRoot)), 'Instruction file leaves the project folder', 'PATH_OUTSIDE_PROJECT')
+    }
+    assertInside(await realpath(dirname(target)))
+    try {
+      assertInside(await realpath(target))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+    return target
+  }
+
   async context(id: string): Promise<ProjectContext> {
     const project = this.get(id)
     for (const filename of ['AGENTS.md', 'agent.md']) {
+      const target = await this.instructionPath(project, filename)
       try {
-        const instructions = await readFile(resolve(project.path, filename), 'utf8')
+        const instructions = await readFile(target, 'utf8')
         return { project, instructions, instructionFile: filename }
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -133,8 +150,8 @@ export class ProjectService {
     const project = this.get(id)
     const context = await this.context(id)
     const filename = context.instructionFile ?? 'AGENTS.md'
-    const { writeFile } = await import('node:fs/promises')
-    await writeFile(resolve(project.path, filename), content, 'utf8')
+    const target = await this.instructionPath(project, filename)
+    await writeFile(target, content, 'utf8')
     return { project, instructions: content, instructionFile: filename }
   }
 }

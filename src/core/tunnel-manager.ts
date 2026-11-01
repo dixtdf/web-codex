@@ -3,12 +3,14 @@ import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
 import { existsSync } from 'node:fs'
 import { readFile, rm } from 'node:fs/promises'
+import { StringDecoder } from 'node:string_decoder'
 import { dirname, join, resolve } from 'node:path'
 import type { TunnelClientState, TunnelState } from '../shared/types'
 import { ConfigStore } from './config-store'
 import { ProxyManager } from './proxy-manager'
 import type { ActivityLogger } from './activity-logger'
 import { AppError, errorMessage } from './errors'
+import { terminateProcessTree } from './process-tree'
 
 const execFileAsync = promisify(execFile)
 const readinessTimeoutMs = 30_000
@@ -81,6 +83,7 @@ export function buildTunnelCommand(store: ConfigStore, proxy: ProxyManager, clie
 
 export class TunnelManager extends EventEmitter {
   private child?: ChildProcess
+  private startPromise?: Promise<TunnelState>
   private stopping = false
   private state: TunnelState = { running: false, phase: 'disconnected', detail: 'Not connected' }
 
@@ -129,6 +132,18 @@ export class TunnelManager extends EventEmitter {
 
   async start(): Promise<TunnelState> {
     if (this.child) return this.getState()
+    if (this.startPromise) return this.startPromise
+    const starting = this.startInternal()
+    this.startPromise = starting
+    try {
+      return await starting
+    } finally {
+      if (this.startPromise === starting) this.startPromise = undefined
+    }
+  }
+
+  private async startInternal(): Promise<TunnelState> {
+    if (this.child) return this.getState()
     const credentials = this.store.get().tunnel
     if (!credentials.tunnelId.trim() || !credentials.apiKey.trim()) {
       const error = new AppError('请填写 Tunnel ID 和 API Key', 'TUNNEL_CREDENTIALS_REQUIRED')
@@ -176,8 +191,9 @@ export class TunnelManager extends EventEmitter {
       })
       this.child = child
       const buffers = { stdout: '', stderr: '' }
+      const decoders = { stdout: new StringDecoder('utf8'), stderr: new StringDecoder('utf8') }
       const inspectOutput = (stream: 'stdout' | 'stderr', chunk: Buffer): void => {
-        const text = chunk.toString('utf8')
+        const text = decoders[stream].write(chunk)
         buffers[stream] += text
         const lines = buffers[stream].split(/\r?\n/)
         buffers[stream] = lines.pop() ?? ''
@@ -210,7 +226,7 @@ export class TunnelManager extends EventEmitter {
       child.once('close', (code, signal) => {
         this.child = undefined
         for (const stream of ['stdout', 'stderr'] as const) {
-          const line = buffers[stream].trim()
+          const line = `${buffers[stream]}${decoders[stream].end()}`.trim()
           if (line) this.logger?.info({ category: 'tunnel', action: `tunnel.${stream}`, message: line, origin: 'system', data: { stream, final: true } })
         }
         this.logger?.[code === 0 || this.stopping ? 'info' : 'error']({ category: 'tunnel', action: 'tunnel.closed', message: `Tunnel process closed with code ${code ?? 'unknown'}`, origin: 'system', status: this.stopping ? 'stopped' : code === 0 ? 'success' : 'error', data: { code, signal } })
@@ -228,6 +244,8 @@ export class TunnelManager extends EventEmitter {
   }
 
   async stop(): Promise<void> {
+    const starting = this.startPromise
+    if (starting) await starting.catch(() => undefined)
     const child = this.child
     this.logger?.info({ category: 'tunnel', action: 'tunnel.stop', message: 'Stopping OpenAI Tunnel', origin: 'system', status: 'started', data: { pid: child?.pid } })
     if (!child) {
@@ -235,17 +253,13 @@ export class TunnelManager extends EventEmitter {
       return
     }
     this.stopping = true
-    const closed = new Promise<void>((resolveClose) => child.once('close', () => resolveClose()))
-    if (process.platform === 'win32') {
-      spawn('taskkill.exe', ['/pid', String(child.pid), '/t', '/f'], { windowsHide: true })
-    } else if (child.pid) {
-      try {
-        process.kill(-child.pid, 'SIGTERM')
-      } catch {
-        child.kill('SIGTERM')
-      }
+    if (!await terminateProcessTree(child, 5000)) {
+      this.stopping = false
+      const error = new AppError('Tunnel process did not exit after forced termination', 'TUNNEL_STOP_TIMEOUT')
+      this.logger?.error({ category: 'tunnel', action: 'tunnel.stop_failed', message: error.message, origin: 'system' })
+      this.update({ running: true, phase: 'error', detail: 'Tunnel failed to stop', error: error.message })
+      throw error
     }
-    await Promise.race([closed, new Promise<void>((resolveTimeout) => setTimeout(resolveTimeout, 5000))])
     this.child = undefined
     this.stopping = false
     this.logger?.info({ category: 'tunnel', action: 'tunnel.stopped', message: 'OpenAI Tunnel stopped', origin: 'system', status: 'stopped' })
@@ -310,7 +324,7 @@ export class TunnelManager extends EventEmitter {
         running: true,
         phase: 'error',
         detail: 'Tunnel readiness timed out',
-        error: readinessDetail || 'Tunnel 进程已启动，但 30 秒内 /readyz 未报告就绪。请运行 doctor 并检查 Tunnel 日志。'
+        error: readinessDetail || `Tunnel 进程已启动，但 ${Math.max(1, Math.round(this.readinessTimeout / 1000))} 秒内 /readyz 未报告就绪。请运行 doctor 并检查 Tunnel 日志。`
       })
     }
   }

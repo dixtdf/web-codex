@@ -50,7 +50,7 @@ function mergeConfig(saved: Partial<AppConfig>): AppConfig {
     mcpServers: Array.isArray(saved.mcpServers) ? saved.mcpServers : defaults.mcpServers,
     network: { ...defaults.network, ...saved.network },
     gateway: { ...defaults.gateway, ...saved.gateway, authToken: saved.gateway?.authToken || defaults.gateway.authToken },
-    tunnel: { ...defaults.tunnel, ...saved.tunnel },
+    tunnel: { ...defaults.tunnel, ...saved.tunnel, apiKey: saved.tunnel?.apiKey ?? defaults.tunnel.apiKey },
     ui: { ...defaults.ui, ...saved.ui },
     limits: { ...defaults.limits, ...saved.limits }
   }
@@ -121,8 +121,8 @@ export class ConfigStore extends EventEmitter {
 
   private async unprotectConfig(saved: Partial<AppConfig>): Promise<Partial<AppConfig>> {
     const config = structuredClone(saved)
-    if (config.gateway) config.gateway.authToken = await this.unprotectValue(config.gateway.authToken)
-    if (config.tunnel) config.tunnel.apiKey = await this.unprotectValue(config.tunnel.apiKey)
+    if (config.gateway && typeof config.gateway.authToken === 'string') config.gateway.authToken = await this.unprotectValue(config.gateway.authToken)
+    if (config.tunnel && typeof config.tunnel.apiKey === 'string') config.tunnel.apiKey = await this.unprotectValue(config.tunnel.apiKey)
     if (Array.isArray(config.mcpServers)) {
       for (const server of config.mcpServers) {
         const values = server.transport === 'stdio' ? server.env : server.headers

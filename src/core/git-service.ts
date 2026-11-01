@@ -62,7 +62,7 @@ export class GitService {
       args.push(options.base)
     }
     if (options.path) args.push('--', await this.safeRelative(root, options.path))
-    const output = await this.git(root, args, true)
+    const output = await this.git(root, args)
     return { diff: output.slice(0, maxGitOutput), truncated: output.length > maxGitOutput }
   }
 
@@ -214,14 +214,13 @@ export class GitService {
     await this.git(root, ['rev-parse', '--verify', `${ref}^{commit}`])
   }
 
-  private async git(root: string, args: string[], allowEmpty = false): Promise<string> {
+  private async git(root: string, args: string[]): Promise<string> {
     try {
       const { stdout } = await execFileAsync('git', args, { cwd: root, windowsHide: true, timeout: 20_000, maxBuffer: maxGitOutput * 2, encoding: 'utf8' })
       return stdout.trimEnd()
     } catch (error) {
       const candidate = error as Error & { stderr?: string; code?: string | number }
       if (candidate.code === 'ENOENT') throw new AppError('Git executable was not found', 'GIT_UNAVAILABLE')
-      if (allowEmpty && typeof candidate.stderr === 'string') return candidate.stderr.trimEnd()
       throw new AppError(candidate.stderr?.trim() || candidate.message || 'Git command failed', 'GIT_COMMAND_FAILED', { args })
     }
   }

@@ -29,7 +29,7 @@ Build and start Electron with `--remote-debugging-port=9222`, then run `npm run 
 
 ## Coverage
 
-The suite uses Vitest with V8 coverage. Core service tests target more than 90% line coverage and at least 80% branch coverage. The current verified baseline is 151 tests total (134 core/service + 17 MCP E2E), with 93.47% line, 81.33% branch, and 90.86% function coverage. Assertions validate returned content, error codes, process state, filesystem effects, MCP structured results, and mock command arguments rather than only checking object existence.
+The suite uses Vitest with V8 coverage. Core service tests target more than 90% line coverage and at least 80% branch coverage. The current verified baseline is 159 tests total (142 core/service + 17 MCP E2E), with 93.47% line, 81.33% branch, and 90.86% function coverage. Assertions validate returned content, error codes, process state, filesystem effects, MCP structured results, and mock command arguments rather than only checking object existence.
 
 ## Local fixtures
 

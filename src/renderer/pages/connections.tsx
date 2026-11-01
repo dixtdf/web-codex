@@ -112,6 +112,15 @@ export function ConnectionsPage({ config, runtime, notify, refresh }: PageProps)
     }
   }
 
+  const disconnect = async (id: string): Promise<void> => {
+    try {
+      await window.webCodex.disconnectMcpServer(id)
+      notify('MCP 已断开')
+    } catch (error) {
+      notify(errorText(error), 'error')
+    }
+  }
+
   const remove = async (server: McpServerConfig): Promise<void> => {
     if (!window.confirm(`移除 ${server.name}？只会删除连接配置。`)) return
     try {
@@ -132,7 +141,7 @@ export function ConnectionsPage({ config, runtime, notify, refresh }: PageProps)
           <div className="resource-card-top"><div className={`resource-icon ${state?.connected ? 'connected' : ''}`}>{server.transport === 'stdio' ? <Cable size={21} /> : <Globe2 size={21} />}</div><div className="resource-title"><h3>{server.name}</h3><p>{server.transport === 'stdio' ? `${server.command} ${server.args.join(' ')}` : server.url}</p></div><StatusPill tone={state?.connected ? 'success' : state?.error ? 'danger' : 'neutral'}>{state?.connected ? '已连接' : state?.error ? '连接失败' : '未连接'}</StatusPill></div>
           <div className="resource-meta"><span><Blocks size={14} />{state?.toolCount ?? 0} 个工具</span><span className="mono">{server.alias}__*</span><span>{server.transport}</span></div>
           {state?.error && <p className="field-hint" title={state.error}>{state.error}</p>}
-          <div className="resource-actions"><button className="button secondary small" onClick={() => state?.connected ? void window.webCodex.disconnectMcpServer(server.id) : void connect(server.id)}>{state?.connected ? <Unplug size={14} /> : <Power size={14} />}{state?.connected ? '断开' : '连接'}</button><button className="icon-button" title="重新连接" onClick={() => void connect(server.id)}><RefreshCw size={16} /></button><span className="spacer" /><button className="icon-button" onClick={() => { setEditing(server); setFormOpen(true) }}><Pencil size={16} /></button><button className="icon-button danger" onClick={() => void remove(server)}><Trash2 size={16} /></button></div>
+          <div className="resource-actions"><button className="button secondary small" onClick={() => state?.connected ? void disconnect(server.id) : void connect(server.id)}>{state?.connected ? <Unplug size={14} /> : <Power size={14} />}{state?.connected ? '断开' : '连接'}</button><button className="icon-button" title="重新连接" onClick={() => void connect(server.id)}><RefreshCw size={16} /></button><span className="spacer" /><button className="icon-button" onClick={() => { setEditing(server); setFormOpen(true) }}><Pencil size={16} /></button><button className="icon-button danger" onClick={() => void remove(server)}><Trash2 size={16} /></button></div>
         </article>
       })}
     </div>}

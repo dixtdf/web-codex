@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -141,6 +141,17 @@ describe('ProjectService agent instructions', () => {
     await projects.saveInstructions(second.id, 'new')
     await expect(readFile(join(second.path, 'agent.md'), 'utf8')).resolves.toBe('new')
     await expect(readFile(join(second.path, 'AGENTS.md'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it.skipIf(process.platform === 'win32')('rejects instruction symlinks that leave the project', async () => {
+    const project = await projects.create({ path: join(temporaryDirectory, 'bounded-instructions') })
+    const outside = join(temporaryDirectory, 'outside.md')
+    await writeFile(outside, 'outside-secret')
+    await symlink(outside, join(project.path, 'AGENTS.md'))
+
+    await expect(projects.context(project.id)).rejects.toMatchObject({ code: 'PATH_OUTSIDE_PROJECT' })
+    await expect(projects.saveInstructions(project.id, 'overwritten')).rejects.toMatchObject({ code: 'PATH_OUTSIDE_PROJECT' })
+    await expect(readFile(outside, 'utf8')).resolves.toBe('outside-secret')
   })
 })
 

@@ -71,6 +71,31 @@ describe('interactive and structured processes', () => {
     await expect(shells.runProcess({ projectId: project.id, executable: process.execPath, args: Array.from({ length: 1001 }, () => 'x') })).rejects.toMatchObject({ code: 'PROCESS_ARGS_LIMIT' })
   })
 
+  it('deduplicates concurrent launches with the same idempotency key', async () => {
+    const options = { projectId: project.id, executable: process.execPath, args: ['-e', 'setTimeout(() => {}, 30000)'], wait: false, idempotencyKey: 'concurrent-process' }
+    const [first, second] = await Promise.all([shells.runProcess(options), shells.runProcess(options)])
+
+    expect(second.id).toBe(first.id)
+    expect(shells.list().filter((task) => task.idempotencyKey === 'concurrent-process')).toHaveLength(1)
+    await shells.stop(first.id)
+  })
+
+  it('enforces output limits in bytes without splitting UTF-8 characters', async () => {
+    const task = await shells.runProcess({ projectId: project.id, executable: process.execPath, args: ['-e', "process.stdout.write('A中🙂B')"], maxOutputBytes: 5 })
+
+    expect(task).toMatchObject({ status: 'completed', stdout: 'A中', truncated: true })
+    expect(Buffer.byteLength(task.stdout)).toBe(4)
+    expect(shells.summary(task.id).stdoutBytes).toBe(4)
+    await expect(shells.runProcess({ projectId: project.id, executable: process.execPath, maxOutputBytes: 0 })).rejects.toMatchObject({ code: 'SHELL_OUTPUT_LIMIT_INVALID' })
+  })
+
+  it.skipIf(process.platform === 'win32')('force-kills a process that ignores graceful termination', async () => {
+    const task = await shells.runProcess({ projectId: project.id, executable: process.execPath, args: ['-e', "process.on('SIGTERM', () => {});setInterval(() => {}, 1000)"], wait: false })
+
+    await expect(shells.stop(task.id)).resolves.toMatchObject({ id: task.id, status: 'stopped' })
+    expect(shells.get(task.id)).toMatchObject({ status: 'stopped', signal: 'SIGKILL' })
+  })
+
   it('enforces the concurrent process limit and releases slots after stopping tasks', async () => {
     const limited = new ShellService(projects, undefined, { statePath: join(temporaryDirectory, 'limited-tasks.json'), maxConcurrentTasks: 2 })
     try {

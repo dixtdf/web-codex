@@ -79,7 +79,10 @@ describe('ActivityLogger JSONL persistence', () => {
   it('scrubs previously persisted ChatGPT identity, session, location, and timezone metadata', async () => {
     await mkdir(directory, { recursive: true })
     const legacy = auditEvent('gateway.request')
+    const tunnelId = 'tunnel_0123456789abcdef0123456789abcdef'
+    legacy.message = `Legacy request for ${tunnelId}`
     legacy.data = {
+      legacyTunnel: tunnelId,
       body: {
         params: {
           _meta: {
@@ -98,7 +101,7 @@ describe('ActivityLogger JSONL persistence', () => {
     const logger = new ActivityLogger(directory)
     await logger.initialize()
     const raw = await readAuditText()
-    for (const secret of ['legacy-subject', 'legacy-session', 'legacy-organization', 'LegacyCity', 'Legacy/Zone', '-480']) {
+    for (const secret of ['legacy-subject', 'legacy-session', 'legacy-organization', 'LegacyCity', 'Legacy/Zone', '-480', tunnelId]) {
       expect(raw).not.toContain(secret)
     }
     expect(raw).toContain('"openai/subject":"[REDACTED]"')

@@ -54,12 +54,13 @@ describe('ConfigStore', () => {
     const saved = createDefaultConfig()
     saved.gateway.port = 41000
     saved.network.manualProxy = 'localhost:8080'
-    await writeFile(filePath, JSON.stringify({ gateway: { port: saved.gateway.port }, network: { manualProxy: saved.network.manualProxy }, projects: null, limits: { maxConcurrentTasks: 7 } }))
+    await writeFile(filePath, JSON.stringify({ gateway: { port: saved.gateway.port }, network: { manualProxy: saved.network.manualProxy }, tunnel: { autoStart: true }, projects: null, limits: { maxConcurrentTasks: 7 } }))
 
     const store = new ConfigStore(filePath, protector)
     const loaded = await store.load()
     expect(loaded.gateway).toMatchObject({ port: 41000, host: '127.0.0.1' })
     expect(loaded.network).toMatchObject({ mode: 'auto', manualProxy: 'localhost:8080' })
+    expect(loaded.tunnel).toMatchObject({ autoStart: true, apiKey: '', tunnelId: '', publicUrl: '' })
     expect(loaded.projects).toEqual([])
     expect(loaded.limits).toEqual({ maxConcurrentTasks: 7 })
 

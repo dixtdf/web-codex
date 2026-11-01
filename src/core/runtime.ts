@@ -32,6 +32,20 @@ function sanitizeEndpoint(value: string | null | undefined): string | null {
   }
 }
 
+async function runAll(operations: Array<() => Promise<unknown>>): Promise<void> {
+  let firstError: unknown
+  let failed = false
+  for (const operation of operations) {
+    try {
+      await operation()
+    } catch (error) {
+      if (!failed) firstError = error
+      failed = true
+    }
+  }
+  if (failed) throw firstError
+}
+
 export class Runtime extends EventEmitter {
   readonly store: ConfigStore
   readonly logs: ActivityLogger
@@ -104,22 +118,32 @@ export class Runtime extends EventEmitter {
 
   async stop(): Promise<void> {
     this.logs.info({ category: 'app', action: 'runtime.stop', message: 'Stopping local runtime', origin: 'system', status: 'started' })
-    await this.tunnel.stop()
-    await this.hub.stop()
-    await this.shell.stopAll()
-    await this.gateway.stop()
-    await this.proxy.stop()
-    await this.store.flush()
-    this.logs.info({ category: 'app', action: 'runtime.stopped', message: 'Local runtime stopped', origin: 'system', status: 'stopped' })
-    await this.logs.flush()
+    try {
+      await runAll([
+        () => this.tunnel.stop(),
+        () => this.hub.stop(),
+        () => this.shell.stopAll(),
+        () => this.gateway.stop(),
+        () => this.proxy.stop(),
+        () => this.store.flush()
+      ])
+      this.logs.info({ category: 'app', action: 'runtime.stopped', message: 'Local runtime stopped', origin: 'system', status: 'stopped' })
+    } catch (error) {
+      this.logs.error({ category: 'app', action: 'runtime.stop_failed', message: 'Local runtime stopped with errors', origin: 'system', data: { error: errorMessage(error) } })
+      throw error
+    } finally {
+      await this.logs.flush()
+    }
   }
 
   async emergencyStop(): Promise<void> {
     this.logs.warn({ category: 'security', action: 'emergency.started', message: 'Emergency stop requested', status: 'started' })
     try {
-      await this.tunnel.stop()
-      await this.gateway.stop()
-      await this.shell.stopAll()
+      await runAll([
+        () => this.tunnel.stop(),
+        () => this.gateway.stop(),
+        () => this.shell.stopAll()
+      ])
       this.logs.warn({ category: 'security', action: 'emergency.stopped', message: 'Remote access stopped and shell tasks terminated', status: 'stopped' })
       this.emit('change', this.snapshot())
     } catch (error) {

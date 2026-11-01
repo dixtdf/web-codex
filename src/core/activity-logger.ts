@@ -276,7 +276,9 @@ export class ActivityLogger extends EventEmitter {
         if (!line.trim()) return line
         try {
           const event = JSON.parse(line) as AuditLogEvent
-          if (!redactOpenAIMetadata(event) && !this.redactEventTunnelIds(event)) return line
+          const metadataChanged = redactOpenAIMetadata(event)
+          const tunnelIdsChanged = this.redactEventTunnelIds(event)
+          if (!metadataChanged && !tunnelIdsChanged) return line
           changed = true
           return JSON.stringify(event)
         } catch {

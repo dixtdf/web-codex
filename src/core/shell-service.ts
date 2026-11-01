@@ -9,6 +9,7 @@ import type { ShellKind, ShellOutputChunk, ShellTask, ShellTaskListResult, Shell
 import { AppError, assertCondition } from './errors'
 import { ProjectService } from './project-service'
 import type { ActivityLogger } from './activity-logger'
+import { terminateProcessTree } from './process-tree'
 
 export interface ShellRunOptions {
   projectId: string
@@ -137,6 +138,14 @@ function summarize(task: MutableTask): ShellTaskSummary {
     stdoutBytes: Buffer.byteLength(task.stdout),
     stderrBytes: Buffer.byteLength(task.stderr)
   }
+}
+
+function utf8Prefix(value: string, maxBytes: number): { text: string; truncated: boolean } {
+  const buffer = Buffer.from(value, 'utf8')
+  if (buffer.length <= maxBytes) return { text: value, truncated: false }
+  let end = Math.max(0, maxBytes)
+  while (end > 0 && (buffer[end] & 0xc0) === 0x80) end -= 1
+  return { text: buffer.subarray(0, end).toString('utf8'), truncated: true }
 }
 
 function taskOutput(task: MutableTask, stream: 'stdout' | 'stderr', offset: number, maxBytes: number): ShellOutputChunk {
@@ -335,48 +344,29 @@ export class ShellService extends EventEmitter {
   async stop(id: string): Promise<ShellTask> {
     const task = this.tasks.get(id)
     if (!task) throw new AppError(`Shell task not found: ${id}`, 'SHELL_TASK_NOT_FOUND')
-    if (task.status !== 'running' || !task.child) return publicTask(task)
+    if (!task.child || (task.status !== 'running' && task.status !== 'stopped')) return publicTask(task)
     task.status = 'stopped'
     task.stdinOpen = false
     this.logger?.warn({ category: 'shell', action: 'shell.stop', message: 'Stopping shell command', status: 'stopped', projectId: task.projectId, taskId: id, data: { command: task.command, pid: task.pid } })
     const child = task.child
     if (child.stdin && !child.stdin.destroyed) child.stdin.end()
-    const exited = new Promise<void>((resolveExit) => child.once('close', () => resolveExit()))
-    if (process.platform === 'win32') {
-      const killer = spawn('taskkill.exe', ['/pid', String(child.pid), '/t', '/f'], { windowsHide: true })
-      await new Promise<void>((resolveKill) => {
-        const timeout = setTimeout(resolveKill, 5000)
-        timeout.unref()
-        killer.once('close', () => {
-          clearTimeout(timeout)
-          resolveKill()
-        })
-        killer.once('error', () => {
-          clearTimeout(timeout)
-          resolveKill()
-        })
-      })
-    } else if (child.pid) {
-      try {
-        process.kill(-child.pid, 'SIGTERM')
-      } catch {
-        child.kill('SIGTERM')
-      }
-    } else {
-      child.kill('SIGTERM')
+    if (!await terminateProcessTree(child)) {
+      task.status = 'running'
+      task.stateReason = 'Process did not exit after forced termination'
+      this.emit('change', publicTask(task))
+      this.schedulePersist()
+      throw new AppError('Process did not exit after forced termination', 'SHELL_STOP_TIMEOUT')
     }
-    await Promise.race([
-      exited,
-      new Promise<void>((resolveTimeout) => setTimeout(resolveTimeout, 2000))
-    ])
     this.emit('change', publicTask(task))
     this.schedulePersist()
     return publicTask(task)
   }
 
   async stopAll(): Promise<void> {
-    await Promise.all([...this.tasks.values()].filter((task) => task.status === 'running').map((task) => this.stop(task.id)))
+    const results = await Promise.allSettled([...this.tasks.values()].filter((task) => task.status === 'running').map((task) => this.stop(task.id)))
     await this.flush()
+    const failed = results.find((result) => result.status === 'rejected')
+    if (failed?.status === 'rejected') throw failed.reason
   }
 
   async flush(): Promise<void> {
@@ -411,8 +401,13 @@ export class ShellService extends EventEmitter {
   }
 
   private async launch(input: LaunchInput): Promise<ShellTask> {
+    if (input.idempotencyKey) {
+      const existing = this.findByIdempotencyKey(input.projectId, input.idempotencyKey)
+      if (existing) return existing
+    }
     const runningTasks = [...this.tasks.values()].filter((task) => task.status === 'running').length
     assertCondition(runningTasks < this.maxConcurrentTasks, `Concurrent task limit reached (${this.maxConcurrentTasks})`, 'SHELL_CONCURRENCY_LIMIT')
+    assertCondition(input.maxOutputBytes === undefined || (Number.isSafeInteger(input.maxOutputBytes) && input.maxOutputBytes > 0), 'maxOutputBytes must be a positive integer', 'SHELL_OUTPUT_LIMIT_INVALID')
     const id = randomUUID()
     const task: MutableTask = {
       id,
@@ -471,15 +466,16 @@ export class ShellService extends EventEmitter {
         return
       }
       const text = typeof chunk === 'string' ? chunk : decoders[stream].write(chunk)
-      task[stream] += text.slice(0, outputLimit - current)
-      if (Buffer.byteLength(text) > outputLimit - current) task.truncated = true
+      const prefix = utf8Prefix(text, outputLimit - current)
+      task[stream] += prefix.text
+      if (prefix.truncated) task.truncated = true
       this.emit('change', publicTask(task))
       this.schedulePersist()
     }
     child.stdout?.on('data', (chunk: Buffer) => append('stdout', chunk))
     child.stderr?.on('data', (chunk: Buffer) => append('stderr', chunk))
     child.on('error', (error) => {
-      task.stderr += error.message
+      append('stderr', error.message)
       task.status = 'failed'
       task.stateReason = error.message
       task.endedAt = new Date().toISOString()
@@ -513,7 +509,7 @@ export class ShellService extends EventEmitter {
     if (input.timeoutMs && input.timeoutMs > 0) {
       task.timeout = setTimeout(() => {
         if (task.status === 'running') {
-          task.stderr += `\nTask timed out after ${input.timeoutMs}ms`
+          append('stderr', `\nTask timed out after ${input.timeoutMs}ms`)
           task.stateReason = `Timed out after ${input.timeoutMs}ms`
           this.logger?.warn({ category: 'shell', action: 'shell.timeout', message: `Task timed out after ${input.timeoutMs}ms`, projectId: task.projectId, taskId: id, data: { command: task.command, timeoutMs: input.timeoutMs } })
           void this.stop(id)

@@ -106,6 +106,11 @@ describe('GitService status, diff, and history', () => {
     await runGit(['commit', '-m', 'Resolve shared conflict'])
   })
 
+  it('surfaces Git diff execution failures instead of returning stderr as a diff', async () => {
+    await rm(join(project.path, '.git'), { recursive: true, force: true })
+    await expect(git.diff(project.id)).rejects.toMatchObject({ code: 'GIT_COMMAND_FAILED' })
+  })
+
   it('rejects unsafe paths, invalid revisions, empty messages, and unavailable Git', async () => {
     await expect(git.stage(project.id, ['../outside.txt'])).rejects.toMatchObject({ code: 'PATH_OUTSIDE_PROJECT' })
     await expect(git.diff(project.id, { base: '--dangerous' })).rejects.toMatchObject({ code: 'GIT_REF_INVALID' })

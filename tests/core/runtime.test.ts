@@ -24,6 +24,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await runtime.stop()
   await rm(temporaryDirectory, { recursive: true, force: true })
 })
@@ -94,6 +95,16 @@ describe('Runtime orchestration', () => {
     expect(runtime.gateway.getState()).toEqual({ running: false, detail: 'Stopped' })
     expect(runtime.shell.get(task.id).status).toBe('stopped')
     expect(runtime.tunnel.getState().running).toBe(false)
+  })
+
+  it('continues emergency cleanup when one service fails to stop', async () => {
+    vi.spyOn(runtime.tunnel, 'stop').mockRejectedValue(new Error('tunnel stop failed'))
+    const gatewayStop = vi.spyOn(runtime.gateway, 'stop').mockResolvedValue()
+    const shellStop = vi.spyOn(runtime.shell, 'stopAll').mockResolvedValue()
+
+    await expect(runtime.emergencyStop()).rejects.toThrow('tunnel stop failed')
+    expect(gatewayStop).toHaveBeenCalledOnce()
+    expect(shellStop).toHaveBeenCalledOnce()
   })
 
   it('starts the configured gateway automatically and stops it cleanly', async () => {

@@ -82,9 +82,10 @@ export function shouldBypassProxy(rawUrl: string, noProxy: string): boolean {
   return noProxy.split(',').map((item) => item.trim().toLowerCase()).some((rule) => {
     if (!rule) return false
     if (rule === '*') return true
-    const normalized = rule.replace(/^\[|\]$/g, '')
-    const rulePort = normalized.match(/:(\d+)$/)?.[1]
-    const ruleHost = normalized.replace(/:\d+$/, '').replace(/^\./, '')
+    const bracketed = rule.match(/^\[([^\]]+)](?::(\d+))?$/)
+    const hostWithPort = bracketed ? undefined : rule.match(/^([^:]+):(\d+)$/)
+    const ruleHost = (bracketed?.[1] ?? hostWithPort?.[1] ?? rule).replace(/^\./, '')
+    const rulePort = bracketed?.[2] ?? hostWithPort?.[2]
     if (rulePort && rulePort !== port) return false
     return hostname === ruleHost || hostname.endsWith(`.${ruleHost}`)
   })
@@ -93,6 +94,7 @@ export function shouldBypassProxy(rawUrl: string, noProxy: string): boolean {
 export class ProxyManager extends EventEmitter {
   private state: ProxyState
   private timer?: NodeJS.Timeout
+  private detectionVersion = 0
   private readonly agents = new Map<string, ProxyAgent>()
 
   constructor(private readonly store: ConfigStore, private readonly logger?: ActivityLogger) {
@@ -111,13 +113,15 @@ export class ProxyManager extends EventEmitter {
   }
 
   async detect(): Promise<ProxyState> {
+    const version = ++this.detectionVersion
     const settings = this.store.get().network
     const previous = JSON.stringify({ ...this.state, checkedAt: '' })
+    let next: ProxyState
     try {
       if (settings.mode === 'direct') {
-        this.state = { mode: settings.mode, source: 'direct', proxy: null, noProxy: settings.noProxy, checkedAt: new Date().toISOString() }
+        next = { mode: settings.mode, source: 'direct', proxy: null, noProxy: settings.noProxy, checkedAt: new Date().toISOString() }
       } else if (settings.mode === 'manual') {
-        this.state = {
+        next = {
           mode: settings.mode,
           source: settings.manualProxy ? 'manual' : 'direct',
           proxy: settings.manualProxy ? withScheme(settings.manualProxy) : null,
@@ -127,7 +131,7 @@ export class ProxyManager extends EventEmitter {
       } else {
         const environment = environmentProxy(process.env)
         const system = environment.proxy ? null : await detectSystemProxy()
-        this.state = {
+        next = {
           mode: settings.mode,
           source: environment.proxy ? 'environment' : system ? 'system' : 'direct',
           proxy: environment.proxy ?? system,
@@ -136,8 +140,10 @@ export class ProxyManager extends EventEmitter {
         }
       }
     } catch (error) {
-      this.state = { ...this.state, checkedAt: new Date().toISOString(), error: errorMessage(error) }
+      next = { ...this.state, checkedAt: new Date().toISOString(), error: errorMessage(error) }
     }
+    if (version !== this.detectionVersion) return this.getState()
+    this.state = next
     if (JSON.stringify({ ...this.state, checkedAt: '' }) !== previous) {
       const input = { category: 'network' as const, action: this.state.error ? 'network.proxy_error' : 'network.proxy_changed', message: this.state.error ? 'Proxy detection failed' : `Proxy configuration changed: ${this.state.source}`, origin: 'system' as const, data: { mode: this.state.mode, source: this.state.source, proxy: this.state.proxy, noProxy: this.state.noProxy, error: this.state.error } }
       if (this.state.error) this.logger?.warn(input)
@@ -156,6 +162,7 @@ export class ProxyManager extends EventEmitter {
   }
 
   async stop(): Promise<void> {
+    this.detectionVersion += 1
     if (this.timer) clearInterval(this.timer)
     this.timer = undefined
     await Promise.all([...this.agents.values()].map((agent) => agent.close()))

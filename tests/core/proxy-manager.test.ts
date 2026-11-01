@@ -74,6 +74,9 @@ describe('proxy parsing and bypass rules', () => {
     expect(shouldBypassProxy('https://example.com', 'example.com:8443')).toBe(false)
     expect(shouldBypassProxy('https://notexample.com', 'example.com')).toBe(false)
     expect(shouldBypassProxy('http://example.com', 'example.com:80')).toBe(true)
+    expect(shouldBypassProxy('http://[2001:db8::1]:8080', '[2001:db8::1]:8080')).toBe(true)
+    expect(shouldBypassProxy('http://[2001:db8::1]:8081', '[2001:db8::1]:8080')).toBe(false)
+    expect(shouldBypassProxy('http://[2001:db8::1]', '[2001:db8::1]')).toBe(true)
   })
 })
 
@@ -139,6 +142,21 @@ describe('ProxyManager detection', () => {
     execFileMock.mockRejectedValue(new Error('registry denied'))
 
     expect(await proxy.detect()).toMatchObject({ source: 'direct', proxy: null, error: 'registry denied' })
+  })
+
+  it('does not let a stale system detection overwrite newer direct settings', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    let resolveRegistry!: (value: { stdout: string; stderr: string }) => void
+    execFileMock.mockImplementation(() => new Promise((resolve) => {
+      resolveRegistry = resolve
+    }))
+    const pending = proxy.detect()
+    store.update({ network: { ...store.get().network, mode: 'direct' } })
+    await expect(proxy.detect()).resolves.toMatchObject({ mode: 'direct', source: 'direct', proxy: null })
+
+    resolveRegistry({ stdout: 'ProxyEnable REG_DWORD 0x1\nProxyServer REG_SZ stale.local:8080', stderr: '' })
+    await expect(pending).resolves.toMatchObject({ mode: 'direct', source: 'direct', proxy: null })
+    expect(proxy.getState()).toMatchObject({ mode: 'direct', source: 'direct', proxy: null })
   })
 
   it('refreshes on the configured interval and stops its timer', async () => {
