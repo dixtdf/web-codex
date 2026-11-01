@@ -1,9 +1,15 @@
 # Changelog
 
-## 0.5.2 - 2026-11-01 (local/unreleased; unsigned)
+## 0.5.2 - 2026-11-01 (unsigned)
 
 ### Fixed
 
+- Hardened process, Tunnel, Gateway, and runtime lifecycle handling, including stdin errors, startup failures, concurrent starts, and coordinated emergency shutdown.
+- Corrected IPv6 loopback URLs, full IPv4 loopback proxy bypass, disconnected MCP tool discovery, and duplicate downstream connection attempts.
+- Strengthened project boundaries, case-sensitive path handling, binary-read validation, transactional ZIP validation, and batch-upload rollback.
+- Prevented configuration write failures and legacy MCP fields from breaking startup, redacted correlation identifiers, and blocked audit export over active log files.
+- Corrected host uptime reporting, native directory-open errors, task project selection, and renderer IPC error notifications.
+- Added regression coverage for malformed MCP JSON, configuration persistence recovery, legacy configuration migration, and real concurrent startup behavior.
 - Windows CMD built-in commands consistently execute through a temporary UTF-8 script with explicit `exit /b`, preventing simple commands such as `echo CMD_1453` from remaining open in affected Electron environments. External executables retain direct process-tree execution, and quoted/Unicode commands remain covered.
 - Added direct ShellService and real MCP regressions for the four-second CMD timeout case, quoted commands, Unicode output, non-zero exits, and background process-tree termination.
 - Documented recovery actions for unavailable project registrations and the precise backward-aligned UTF-8 `requestedOffset`/`actualOffset`/`nextOffset` pagination contract.
