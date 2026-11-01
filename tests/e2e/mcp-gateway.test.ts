@@ -228,6 +228,9 @@ describe('MCP Gateway HTTP transport', () => {
     expect(tasks.tasks).toEqual([expect.objectContaining({ id: taskId, stdoutBytes: 3 })])
     expect(tasks.nextCursor).toBeNull()
     await expect(callTool(23, 'shell_task_output', { taskId, stream: 'stdout', offset: 0, maxBytes: 10 })).resolves.toMatchObject({ data: '42\n', eof: true })
+    if (process.platform === 'win32') {
+      await expect(callTool(24, 'shell_run', { shell: 'cmd', command: 'echo CMD_1453', timeoutMs: 4000 })).resolves.toMatchObject({ status: 'completed', exitCode: 0, stdout: 'CMD_1453\r\n', stderr: '' })
+    }
   })
 
   it('enforces deletion previews, version checks, and strict argument schemas', async () => {

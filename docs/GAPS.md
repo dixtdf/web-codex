@@ -51,8 +51,8 @@ This matrix maps the Desktop capability assessment in the user's `问题.md` to 
 
 ## Current verification snapshot
 
-- 150 tests total (133 core/service + 17 MCP E2E).
-- Total coverage: 93.46% lines, 81.30% branches, 90.86% functions (90.94% statements).
+- 151 tests total (134 core/service + 17 MCP E2E).
+- Total coverage: 93.47% lines, 81.33% branches, 90.86% functions (90.95% statements).
 - Official Tunnel local control plane: `server/discover`, 58 tools, `project_list`, binary attachment copy.
 - Real packaged Electron UI smoke (`appVersion=0.3.0`): six pages, tray, attachment inbox, log center, redacted diagnostics, concurrency-setting IPC, menu hidden, installed `server/discover` 200.
 - Installed 0.3.0 Desktop QA: `tools/list` returned 58 tools; UTF-8 `offset=5,maxBytes=9` returned `文🙂 c` with `offset=3,nextOffset=12` and no replacement character; default CMD/PowerShell and `shell_task_output` returned `中文🙂 café Ω`; moving onto an existing destination returned `FILE_ALREADY_EXISTS`.
@@ -61,6 +61,6 @@ This matrix maps the Desktop capability assessment in the user's `问题.md` to 
 - Production dependency audit: 0 reported vulnerabilities.
 - Automated `security_audit` full-repository deep and normal runs timed out in phase 1 after 300 seconds; no audit-pass result is claimed. Manual repository review and targeted security tests passed, but the automated audit must be rerun in a longer-running environment.
 - Published 0.2.1 release packages are unsigned.
-- The 0.5.1 package is a local, unsigned, unreleased test build; it is not pushed or published.
+- The 0.5.2 package is a local, unsigned, unreleased test build; it is not pushed or published.
 
 This file must be updated whenever a partial or unimplemented item changes.

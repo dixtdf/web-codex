@@ -2,6 +2,17 @@
 
 ## 2026-10-31/2026-11-01 local release verification (UTC)
 
+### CMD built-in completion and pagination contract (0.5.2)
+
+- `npm run lint` and `npm run typecheck`: passed.
+- `npx vitest run --coverage`: 20 test files, 151 tests passed (134 core/service + 17 MCP E2E); 93.47% lines, 81.33% branches, 90.86% functions (90.95% statements).
+- `npm run test:e2e`: 17 real MCP HTTP tests passed, including `shell=cmd`, `echo CMD_1453`, a four-second timeout, output, and exit-code verification.
+- `npm run test:tunnel`: official local control plane passed with version 0.5.2 and 58 tools.
+- `npm run dist:win`: built unsigned, unpublished Windows x64, arm64, and combined 0.5.2 NSIS installers; the successful build used the existing official Electron 45.2.1 cache through `electronDist` after network timeouts.
+- `npm run test:ui`: passed with `appVersion=0.5.2` against an isolated production Electron instance; all six pages, 58-tool discovery, typed IPC workflows, diagnostics, and runtime-error/layout checks passed.
+- CMD built-ins use explicit-exit temporary scripts while external executables retain direct process-tree execution; direct, Unicode, quoted, non-zero-exit, background-stop, and cleanup regressions passed.
+- Documented unavailable-project recovery and backward-aligned UTF-8 pagination semantics. This source is not pushed or published.
+
 ### Desktop follow-up hardening (0.5.1)
 
 - `npm run lint` and `npm run typecheck`: passed.

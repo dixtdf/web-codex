@@ -82,10 +82,13 @@ function defaultShell(): Exclude<ShellKind, 'auto'> {
   return 'bash'
 }
 
+const cmdBuiltInCommands = new Set(['assoc', 'break', 'call', 'cd', 'chdir', 'cls', 'color', 'copy', 'date', 'del', 'dir', 'echo', 'echo.', 'endlocal', 'erase', 'exit', 'for', 'ftype', 'goto', 'if', 'md', 'mkdir', 'mklink', 'move', 'path', 'pause', 'popd', 'prompt', 'pushd', 'rd', 'rem', 'ren', 'rename', 'rmdir', 'set', 'setlocal', 'shift', 'start', 'time', 'timeout', 'title', 'type', 'ver', 'verify', 'vol'])
+
 async function shellCommand(shell: Exclude<ShellKind, 'auto'>, command: string): Promise<{ executable: string; args: string[]; cleanupDir?: string }> {
   if (shell === 'cmd') {
     assertCondition(process.platform === 'win32', 'cmd is only available on Windows', 'SHELL_UNAVAILABLE')
-    if (!/[^\x00-\x7f]/.test(command)) {
+    const commandName = command.trimStart().split(/\s+/, 1)[0]?.replace(/^@/, '').toLowerCase()
+    if (!cmdBuiltInCommands.has(commandName) && !/[^\x00-\x7f]/.test(command)) {
       return { executable: process.env.ComSpec ?? 'cmd.exe', args: ['/d', '/s', '/c', command] }
     }
     const directory = await mkdtemp(join(tmpdir(), 'web-codex-cmd-'))

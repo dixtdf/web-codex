@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.2 - 2026-11-01 (local/unreleased; unsigned)
+
+### Fixed
+
+- Windows CMD built-in commands consistently execute through a temporary UTF-8 script with explicit `exit /b`, preventing simple commands such as `echo CMD_1453` from remaining open in affected Electron environments. External executables retain direct process-tree execution, and quoted/Unicode commands remain covered.
+- Added direct ShellService and real MCP regressions for the four-second CMD timeout case, quoted commands, Unicode output, non-zero exits, and background process-tree termination.
+- Documented recovery actions for unavailable project registrations and the precise backward-aligned UTF-8 `requestedOffset`/`actualOffset`/`nextOffset` pagination contract.
+
 ## 0.5.1 - 2026-11-01 (local/unreleased; unsigned)
 
 ### Added

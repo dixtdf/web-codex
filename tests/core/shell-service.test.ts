@@ -61,6 +61,16 @@ describe('ShellService execution', () => {
     expect(task.shell).toBe(process.platform === 'win32' ? 'powershell' : 'bash')
   })
 
+  it('completes simple CMD built-in commands with output and exit metadata', async () => {
+    if (process.platform !== 'win32') return
+    const task = await shells.run({ projectId: project.id, shell: 'cmd', command: 'echo CMD_1453', timeoutMs: 4000 })
+
+    expect(task).toMatchObject({ status: 'completed', exitCode: 0, signal: null, stdout: 'CMD_1453\r\n', stderr: '' })
+    const quoted = await shells.run({ projectId: project.id, shell: 'cmd', command: `node -e "console.log('quoted-ok')"`, timeoutMs: 4000 })
+    expect(quoted).toMatchObject({ status: 'completed', exitCode: 0 })
+    expect(quoted.stdout.trim()).toBe('quoted-ok')
+  })
+
   it('runs inside a project-relative working directory', async () => {
     await mkdir(join(project.path, 'nested'))
     const task = await shells.run({ projectId: project.id, cwd: 'nested', command: nodeEval('console.log(process.cwd())') })

@@ -8,7 +8,7 @@ Responses normally contain JSON text and `structuredContent.result`. `file_downl
 
 ### `project_list`
 
-Arguments: none. Returns every registered project with its remote shell policy and live `health` (`accessible`, `status`, and `error`). `enabled` is registration state, not proof that the path is currently accessible.
+Arguments: none. Returns every registered project with its remote shell policy and live `health` (`accessible`, `status`, and `error`). `enabled` is registration state, not proof that the path is currently accessible. Registration and path updates validate that the directory exists. For an unavailable project, restore the folder at the same path, use `project_update` with a new existing `path`, disable it with `enabled=false`, or remove only its registration with `project_remove`.
 
 ### `project_context_get`
 
@@ -39,6 +39,8 @@ Arguments: `projectId`, optional `path` (default `.`). Returns file, directory, 
 ### `file_read`
 
 Arguments: `projectId`, `path`, optional `offset` and `maxBytes` (default `200000`, maximum `2000000`). Returns UTF-8 content, `requestedOffset`, `actualOffset`, consumed `bytes`, `nextOffset`, size, truncation state, and SHA-256. The legacy `offset` field remains equal to `actualOffset`. Continue with `nextOffset`; chunks never split a UTF-8 character. Binary files must use `file_read_binary`.
+
+When a requested offset falls inside a multi-byte character, the reader deliberately moves **backward** to that character's first byte. Therefore `actualOffset <= requestedOffset` and `bytes = nextOffset - actualOffset`; requesting different offsets inside the same character can return that character again. Clients must append chunks by advancing to `nextOffset`, never by computing `requestedOffset + maxBytes`, and should use `requestedOffset`/`actualOffset` to detect boundary realignment.
 
 ### `file_write`
 
@@ -134,7 +136,7 @@ Arguments: `uploadId`, `projectId`, optional `destinationPath` (default `.`). Sa
 
 ### `shell_run`
 
-Arguments: `projectId`, `command`, optional `shell` (`auto`, `cmd`, `powershell`, `bash`, `zsh`), `cwd`, `timeoutMs` (default `120000`, maximum `86400000`), `wait` (default `true`), and `idempotencyKey`. Remote execution is checked against the project policy. Commands have full desktop-user authority and can access outside the project; the working-directory boundary is not a sandbox. Windows cmd commands preserve quoted scripts correctly.
+Arguments: `projectId`, `command`, optional `shell` (`auto`, `cmd`, `powershell`, `bash`, `zsh`), `cwd`, `timeoutMs` (default `120000`, maximum `86400000`), `wait` (default `true`), and `idempotencyKey`. Remote execution is checked against the project policy. Commands have full desktop-user authority and can access outside the project; the working-directory boundary is not a sandbox. CMD built-in commands such as `echo` run through a temporary UTF-8 script with explicit `exit /b`; external executables retain direct process-tree execution. Quoted and Unicode commands are preserved.
 
 PowerShell 5.1 compatibility: `file_write` creates UTF-8 without BOM, which Windows PowerShell 5.1 may misread with its default file encoding. Use `Get-Content -Raw -Encoding UTF8 -LiteralPath "测试 文件.txt"` for text files. Shell stdout/stderr UTF-8 encoding is configured separately and is not affected by this file-encoding default.
 

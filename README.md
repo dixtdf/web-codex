@@ -9,7 +9,7 @@ Web Codex is an independent, cross-platform Electron workspace that lets Web Cha
 - Register local folders and maintain `AGENTS.md` or `agent.md` instructions.
 - Read, write, patch, search, move, and delete files inside canonical project roots, with precise UTF-8 offsets, glob-filtered/cursor search, SHA-256 conflict checks, deletion dry runs, and recoverable trash.
 - Transfer STEP, STL, KiCad, and other binary files with chunked Base64/SHA-256, ZIP create/extract, and a drag-and-drop attachment inbox.
-- Run cmd, PowerShell, bash, or zsh commands and structured executables with live output, pipe stdin, idempotency keys, timeouts, persisted tasks, pagination, concurrency limits, and process-tree termination.
+- Run cmd, PowerShell, bash, or zsh commands and structured executables with reliable CMD built-in completion, live output, pipe stdin, idempotency keys, timeouts, persisted tasks, pagination, concurrency limits, and process-tree termination.
 - Inspect Git status, diffs, history, branches, staged paths, project-contained worktrees, explicit conflict resolution, and create local commits.
 - Inspect host capabilities and export a redacted JSON connection-diagnostics report.
 - Apply optional per-project remote command policies (`allow`, prefix `allowlist`, or `deny`) without restricting local full-access tasks.
