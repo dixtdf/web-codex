@@ -97,6 +97,28 @@ describe('Runtime orchestration', () => {
     expect(runtime.tunnel.getState().running).toBe(false)
   })
 
+  it('waits for in-flight startup before completing an emergency stop', async () => {
+    const config = runtime.store.get()
+    runtime.store.update({ gateway: { ...config.gateway, autoStart: true } })
+    let releaseGateway!: () => void
+    const gatewayGate = new Promise<void>((resolve) => { releaseGateway = resolve })
+    const gatewayStart = vi.spyOn(runtime.gateway, 'start').mockImplementation(() => gatewayGate.then(() => runtime.gateway.getState()))
+    const gatewayStop = vi.spyOn(runtime.gateway, 'stop').mockResolvedValue()
+
+    const starting = runtime.start()
+    await vi.waitFor(() => expect(gatewayStart).toHaveBeenCalledOnce())
+    const stopping = runtime.emergencyStop()
+    let stopCompleted = false
+    void stopping.then(() => { stopCompleted = true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(stopCompleted).toBe(false)
+
+    releaseGateway()
+    await starting
+    await stopping
+    expect(gatewayStop).toHaveBeenCalledOnce()
+  })
+
   it('continues emergency cleanup when one service fails to stop', async () => {
     vi.spyOn(runtime.tunnel, 'stop').mockRejectedValue(new Error('tunnel stop failed'))
     const gatewayStop = vi.spyOn(runtime.gateway, 'stop').mockResolvedValue()

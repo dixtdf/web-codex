@@ -60,6 +60,7 @@ export class Runtime extends EventEmitter {
   readonly git: GitService
   readonly host: HostService
   privileged = false
+  private startPromise?: Promise<void>
 
   constructor(configPath: string, protector?: SecretProtector) {
     super()
@@ -105,6 +106,17 @@ export class Runtime extends EventEmitter {
   }
 
   async start(): Promise<void> {
+    if (this.startPromise) return this.startPromise
+    const starting = this.startInternal()
+    this.startPromise = starting
+    try {
+      await starting
+    } finally {
+      if (this.startPromise === starting) this.startPromise = undefined
+    }
+  }
+
+  private async startInternal(): Promise<void> {
     this.logs.info({ category: 'app', action: 'runtime.start', message: 'Starting local runtime', origin: 'system', status: 'started' })
     try {
       await this.proxy.start()
@@ -120,6 +132,8 @@ export class Runtime extends EventEmitter {
   }
 
   async stop(): Promise<void> {
+    const starting = this.startPromise
+    if (starting) await starting.catch(() => undefined)
     this.logs.info({ category: 'app', action: 'runtime.stop', message: 'Stopping local runtime', origin: 'system', status: 'started' })
     try {
       await runAll([
@@ -140,6 +154,8 @@ export class Runtime extends EventEmitter {
   }
 
   async emergencyStop(): Promise<void> {
+    const starting = this.startPromise
+    if (starting) await starting.catch(() => undefined)
     this.logs.warn({ category: 'security', action: 'emergency.started', message: 'Emergency stop requested', status: 'started' })
     try {
       await runAll([

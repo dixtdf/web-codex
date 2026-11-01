@@ -40,7 +40,8 @@ function profileDirectory(store: ConfigStore): string {
 
 function localGatewayUrl(store: ConfigStore): string {
   const gateway = store.get().gateway
-  return `http://${gateway.host}:${gateway.port}/mcp`
+  const host = gateway.host.includes(':') ? `[${gateway.host}]` : gateway.host
+  return `http://${host}:${gateway.port}/mcp`
 }
 
 function proxyEnvironment(proxy: ProxyManager): Record<string, string> {
@@ -239,6 +240,7 @@ export class TunnelManager extends EventEmitter {
       this.child = undefined
       this.logger?.error({ category: 'tunnel', action: 'tunnel.start_failed', message: 'Tunnel failed to start', origin: 'system', data: { error: errorMessage(error) } })
       this.update({ running: false, phase: 'error', detail: 'Tunnel failed to start', error: errorMessage(error) })
+      throw error
     }
     return this.getState()
   }

@@ -56,6 +56,7 @@ function normalizeAlias(value: string): string {
 
 export class McpHub extends EventEmitter {
   private readonly connections = new Map<string, Connection>()
+  private readonly connectionAttempts = new Map<string, Promise<McpConnectionState>>()
 
   constructor(private readonly store: ConfigStore, private readonly proxy: ProxyManager, private readonly logger?: ActivityLogger) {
     super()
@@ -111,6 +112,18 @@ export class McpHub extends EventEmitter {
   }
 
   async connect(id: string): Promise<McpConnectionState> {
+    const pending = this.connectionAttempts.get(id)
+    if (pending) return pending
+    const attempt = this.connectInternal(id)
+    this.connectionAttempts.set(id, attempt)
+    try {
+      return await attempt
+    } finally {
+      if (this.connectionAttempts.get(id) === attempt) this.connectionAttempts.delete(id)
+    }
+  }
+
+  private async connectInternal(id: string): Promise<McpConnectionState> {
     const config = this.store.get().mcpServers.find((item) => item.id === id)
     if (!config) throw new AppError(`MCP server not found: ${id}`, 'MCP_SERVER_NOT_FOUND')
     if (!config.enabled) throw new AppError(`MCP server is disabled: ${config.name}`, 'MCP_SERVER_DISABLED')

@@ -91,6 +91,15 @@ describe('buildTunnelCommand', () => {
     expect(command.args).not.toContain('test-gateway-token')
   })
 
+  it('formats IPv6 loopback Gateway URLs with brackets', () => {
+    store.update({ gateway: { ...store.get().gateway, host: '::1' } })
+
+    const command = buildTunnelCommand(store, proxy, clientPath, profileDir)
+
+    expect(command.env.MCP_SERVER_URL).toBe('http://[::1]:34567/mcp')
+    expect(command.env.WEB_CODEX_LOCAL_URL).toBe('http://[::1]:34567/mcp')
+  })
+
   it('omits proxy variables in direct mode', () => {
     const command = buildTunnelCommand(store, proxy, clientPath, profileDir)
     expect(command.env).not.toHaveProperty('HTTPS_PROXY')
@@ -224,7 +233,7 @@ describe('TunnelManager process lifecycle', () => {
   it('surfaces child startup errors', async () => {
     const child = fakeChild(() => queueMicrotask(() => child.emit('error', Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }))))
 
-    await tunnel.start()
+    await expect(tunnel.start()).rejects.toThrow('spawn ENOENT')
     await vi.waitFor(() => expect(tunnel.getState()).toMatchObject({ running: false, phase: 'error', detail: 'Tunnel failed to start', error: 'spawn ENOENT' }))
   })
 
@@ -253,7 +262,7 @@ describe('TunnelManager process lifecycle', () => {
 
   it('captures synchronous spawn validation failures', async () => {
     spawnMock.mockImplementationOnce(() => { throw new Error('spawn EINVAL') })
-    await expect(tunnel.start()).resolves.toMatchObject({ running: false, detail: 'Tunnel failed to start', error: 'spawn EINVAL' })
+    await expect(tunnel.start()).rejects.toThrow('spawn EINVAL')
   })
 })
 

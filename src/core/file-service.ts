@@ -555,7 +555,8 @@ export class FileService {
     const info = await stat(target)
     assertCondition(info.isFile(), 'Path is not a file', 'FILE_NOT_FILE')
     assertCondition(Number.isSafeInteger(offset) && offset >= 0 && offset <= info.size, 'Invalid binary read offset', 'FILE_OFFSET_INVALID')
-    const length = Math.max(0, Math.min(Math.min(maxBytes, 4_000_000), info.size - offset))
+    assertCondition(Number.isSafeInteger(maxBytes) && maxBytes > 0 && maxBytes <= 4_000_000, 'maxBytes must be between 1 and 4000000', 'FILE_LIMIT_INVALID')
+    const length = Math.max(0, Math.min(maxBytes, info.size - offset))
     const handle = await open(target, 'r')
     let buffer: Buffer
     try {
@@ -714,9 +715,16 @@ export class FileService {
       const segments = normalized.split('/')
       assertCondition(!normalized.startsWith('/') && !/^[a-zA-Z]:/.test(normalized) && !segments.includes('..'), 'Archive entry leaves the destination folder', 'ARCHIVE_PATH_OUTSIDE_PROJECT')
       if (entry.isDirectory) continue
+      assertCondition(normalized.length > 0 && !normalized.includes('\0'), 'Archive entry has an invalid path', 'ARCHIVE_PATH_OUTSIDE_PROJECT')
+      const outputPath = resolve(destination.target, normalized)
+      assertCondition(inside(projectRoot, outputPath) && inside(destination.target, outputPath), 'Archive entry leaves the destination folder', 'ARCHIVE_PATH_OUTSIDE_PROJECT')
       bytes += entry.header.size
       files += 1
       assertCondition(entry.header.size <= 50_000_000 && bytes <= maxArchiveBytes, 'Archive entry or total uncompressed size exceeds the limit', 'ARCHIVE_LIMIT_EXCEEDED')
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory) continue
+      const normalized = entry.entryName.replace(/\\/g, '/')
       const relativeDestination = relative(projectRoot, resolve(destination.target, normalized))
       const output = await this.writablePath(projectId, relativeDestination)
       assertCondition(inside(destination.target, output.target), 'Archive entry leaves the destination folder', 'ARCHIVE_PATH_OUTSIDE_PROJECT')

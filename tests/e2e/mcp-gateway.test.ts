@@ -91,6 +91,18 @@ describe('MCP Gateway HTTP transport', () => {
     expect(remove.status).toBe(405)
   })
 
+  it('advertises a valid IPv6 loopback MCP address', async () => {
+    await gateway.stop()
+    store.update({ gateway: { ...store.get().gateway, host: '::1' } })
+
+    const state = await gateway.start()
+
+    const address = new URL(state.address ?? '')
+    expect(address.protocol).toBe('http:')
+    expect(address.hostname).toBe('[::1]')
+    expect(address.pathname).toBe('/mcp')
+  })
+
   it('returns a JSON-RPC parse error for malformed authenticated requests', async () => {
     const response = await fetch(mcpUrl, {
       method: 'POST',

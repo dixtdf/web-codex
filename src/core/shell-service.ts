@@ -320,7 +320,7 @@ export class ShellService extends EventEmitter {
   async writeInput(id: string, data: string, appendNewline = true): Promise<ShellTaskSummary> {
     const task = this.tasks.get(id)
     if (!task) throw new AppError(`Shell task not found: ${id}`, 'SHELL_TASK_NOT_FOUND')
-    assertCondition(task.status === 'running' && task.child?.stdin && !task.child.stdin.destroyed, 'Task standard input is not available', 'SHELL_STDIN_UNAVAILABLE')
+    assertCondition(task.status === 'running' && task.stdinOpen && task.child?.stdin && !task.child.stdin.destroyed && !task.child.stdin.writableEnded, 'Task standard input is not available', 'SHELL_STDIN_UNAVAILABLE')
     assertCondition(Buffer.byteLength(data) <= 1_000_000, 'Standard input exceeds 1 MB', 'SHELL_STDIN_LIMIT')
     await new Promise<void>((resolveWrite, rejectWrite) => {
       task.child?.stdin?.write(appendNewline ? `${data}\n` : data, (error) => error ? rejectWrite(error) : resolveWrite())
@@ -333,6 +333,7 @@ export class ShellService extends EventEmitter {
   async closeInput(id: string): Promise<ShellTaskSummary> {
     const task = this.tasks.get(id)
     if (!task) throw new AppError(`Shell task not found: ${id}`, 'SHELL_TASK_NOT_FOUND')
+    assertCondition(task.status === 'running' && task.stdinOpen && task.child?.stdin && !task.child.stdin.destroyed && !task.child.stdin.writableEnded, 'Task standard input is not available', 'SHELL_STDIN_UNAVAILABLE')
     task.child?.stdin?.end()
     task.stdinOpen = false
     this.logger?.info({ category: 'shell', action: 'shell.stdin_closed', message: 'Closed task standard input', projectId: task.projectId, taskId: id })

@@ -37,6 +37,7 @@ describe('interactive and structured processes', () => {
 
     await expect(shells.writeInput(task.id, 'hello')).resolves.toMatchObject({ id: task.id, status: 'running' })
     await shells.closeInput(task.id)
+    await expect(shells.closeInput(task.id)).rejects.toMatchObject({ code: 'SHELL_STDIN_UNAVAILABLE' })
     await vi.waitFor(() => expect(shells.get(task.id).status).toBe('completed'))
     expect(shells.output(task.id, 'stdout')).toMatchObject({ offset: 0, eof: true, data: 'got:hello\n' })
     expect(shells.summary(task.id).stdoutBytes).toBe(10)

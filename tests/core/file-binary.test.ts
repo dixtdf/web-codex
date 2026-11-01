@@ -51,6 +51,9 @@ describe('FileService binary transfer', () => {
     await expect(files.writeBinary(project.id, 'bad.bin', Buffer.from('z').toString('base64'), { offset: 99 })).rejects.toMatchObject({ code: 'FILE_OFFSET_MISMATCH' })
     await expect(files.writeBinary(project.id, 'bad.bin', Buffer.from('abc').toString('base64'), { expectedSha256: '0'.repeat(64) })).rejects.toMatchObject({ code: 'FILE_HASH_MISMATCH' })
     await expect(files.readBinary(project.id, 'bad.bin', 99)).rejects.toMatchObject({ code: 'FILE_OFFSET_INVALID' })
+    for (const maxBytes of [0, -1, 1.5, 4_000_001]) {
+      await expect(files.readBinary(project.id, 'bad.bin', 0, maxBytes)).rejects.toMatchObject({ code: 'FILE_LIMIT_INVALID' })
+    }
 
     await files.write(project.id, 'guarded.bin', 'safe-content')
     await expect(files.writeBinary(project.id, 'guarded.bin', Buffer.from('corrupt').toString('base64'), { expectedSha256: '0'.repeat(64) })).rejects.toMatchObject({ code: 'FILE_HASH_MISMATCH' })
@@ -90,5 +93,16 @@ describe('FileService ZIP transfer', () => {
 
     await expect(files.extractArchive(project.id, 'malicious.zip', 'safe')).rejects.toMatchObject({ code: 'ARCHIVE_PATH_OUTSIDE_PROJECT' })
     await expect(readFile(join(project.path, 'escape.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('validates every archive entry before writing any output', async () => {
+    const zip = new AdmZip()
+    zip.addFile('safe.txt', Buffer.from('must not be written'))
+    zip.addFile('xx/escape.txt', Buffer.from('blocked'))
+    const malicious = Buffer.from(zip.toBuffer().toString('latin1').replaceAll('xx/escape.txt', '../escape.txt'), 'latin1')
+    await writeFile(join(project.path, 'partial.zip'), malicious)
+
+    await expect(files.extractArchive(project.id, 'partial.zip', 'validated')).rejects.toMatchObject({ code: 'ARCHIVE_PATH_OUTSIDE_PROJECT' })
+    await expect(readFile(join(project.path, 'validated', 'safe.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
   })
 })

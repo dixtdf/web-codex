@@ -20,6 +20,7 @@ let proxy: ProxyManager
 let logger: ActivityLogger
 let hub: McpHub
 let fixtureServer: Server | undefined
+let fixtureInitializeRequests = 0
 const activeFixtureServers = new Set<McpServer>()
 
 beforeEach(async () => {
@@ -39,6 +40,7 @@ afterEach(async () => {
   await Promise.allSettled([...activeFixtureServers].map((server) => server.close()))
   activeFixtureServers.clear()
   if (fixtureServer) await new Promise<void>((resolve) => fixtureServer?.close(() => resolve()))
+  fixtureInitializeRequests = 0
   fixtureServer = undefined
   await proxy.stop()
   await logger.flush()
@@ -147,6 +149,24 @@ describe('McpHub transports', () => {
     await expect(hub.getPrompt(config.id, 'http-greet', { name: 'Web' })).resolves.toMatchObject({ messages: [expect.objectContaining({ content: expect.objectContaining({ text: 'HTTP Hello Web' }) })] })
   })
 
+  it('deduplicates concurrent connection attempts to the same server', async () => {
+    const url = await startHttpFixture()
+    const config = await hub.save({
+      name: 'Concurrent fixture',
+      alias: 'concurrent',
+      enabled: true,
+      transport: 'streamable-http',
+      url,
+      headers: {}
+    })
+
+    const [first, second] = await Promise.all([hub.connect(config.id), hub.connect(config.id)])
+
+    expect(second).toEqual(first)
+    expect(fixtureInitializeRequests).toBe(1)
+    expect(hub.listTools().map((tool) => tool.name)).toEqual(['concurrent__echo'])
+  })
+
   it('records transport failures and allows aliases to be replaced safely', async () => {
     const config = await hub.save({
       name: 'Unavailable',
@@ -182,6 +202,7 @@ async function startHttpFixture(): Promise<string> {
   const app = express()
   app.use(express.json())
   app.post('/mcp', (request, response) => {
+    if (request.body?.method === 'initialize') fixtureInitializeRequests += 1
     void (async () => {
       const server = new McpServer({ name: 'http-fixture', version: '1.0.0' })
       activeFixtureServers.add(server)

@@ -642,7 +642,8 @@ export class McpGateway {
     }
     const address = server.address()
     const port = typeof address === 'object' && address ? address.port : settings.port
-    this.state = { running: true, detail: 'Ready for ChatGPT', address: `http://${settings.host}:${port}/mcp` }
+    const host = settings.host.includes(':') ? `[${settings.host}]` : settings.host
+    this.state = { running: true, detail: 'Ready for ChatGPT', address: `http://${host}:${port}/mcp` }
     this.dependencies.logger?.info({ category: 'gateway', action: 'gateway.started', message: 'Local MCP Gateway is ready', origin: 'system', status: 'success', data: { address: this.state.address } })
     return this.getState()
   }
