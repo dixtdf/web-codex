@@ -6,7 +6,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { Tool } from '@modelcontextprotocol/sdk/types.js'
 import packageJson from '../../package.json'
 import type { McpConnectionState, McpServerConfig } from '../shared/types'
-import { AppError, errorMessage } from './errors'
+import { AppError, assertCondition, errorMessage } from './errors'
 import { ConfigStore } from './config-store'
 import { ProxyManager } from './proxy-manager'
 import type { ActivityLogger } from './activity-logger'
@@ -18,6 +18,24 @@ export interface NamespacedTool {
   serverName: string
   description?: string
   inputSchema: Tool['inputSchema']
+}
+
+export interface NamespacedResource {
+  uri: string
+  name: string
+  description?: string
+  mimeType?: string
+  size?: number
+  serverId: string
+  serverName: string
+}
+
+export interface NamespacedPrompt {
+  name: string
+  description?: string
+  arguments?: Array<{ name: string; description?: string; required?: boolean }>
+  serverId: string
+  serverName: string
 }
 
 interface Connection {
@@ -219,6 +237,94 @@ export class McpHub extends EventEmitter {
     }
     this.logger?.error({ category: 'mcp', action: 'mcp.tool_not_found', message: `Downstream MCP tool not found: ${name}`, data: { name, argumentKeys: Object.keys(args) } })
     throw new AppError(`Namespaced MCP tool not found: ${name}`, 'MCP_TOOL_NOT_FOUND')
+  }
+
+  async listResources(serverId?: string): Promise<NamespacedResource[]> {
+    const connections = this.connectionsFor(serverId)
+    const results = await Promise.allSettled(connections.map(async ({ connection, state }) => {
+      const response = await connection.client.listResources()
+      return response.resources.map((resource) => ({
+        uri: resource.uri,
+        name: resource.name,
+        description: resource.description,
+        mimeType: resource.mimeType,
+        size: resource.size,
+        serverId: state.id,
+        serverName: state.name
+      }))
+    }))
+    return this.settleCollection(results, 'mcp_resource_list').sort((left, right) => left.serverName.localeCompare(right.serverName) || left.uri.localeCompare(right.uri))
+  }
+
+  async readResource(serverId: string, uri: string): Promise<unknown> {
+    const { connection } = this.connectionFor(serverId)
+    assertCondition(uri.trim().length > 0 && uri.length <= 8192, 'Resource URI is required and must be at most 8192 characters', 'MCP_RESOURCE_URI_INVALID')
+    const startedAt = Date.now()
+    this.logger?.info({ category: 'mcp', action: 'mcp.resource_read', message: 'Reading downstream MCP resource', status: 'started', data: { serverId, uri } })
+    try {
+      const response = await connection.client.readResource({ uri })
+      assertCondition(Buffer.byteLength(JSON.stringify(response)) <= 4_000_000, 'Downstream MCP resource exceeds the 4 MB response limit', 'MCP_RESOURCE_LIMIT')
+      this.logger?.info({ category: 'mcp', action: 'mcp.resource_read_success', message: 'Downstream MCP resource read', status: 'success', durationMs: Date.now() - startedAt, data: { serverId, uri } })
+      return response
+    } catch (error) {
+      this.logger?.error({ category: 'mcp', action: 'mcp.resource_read_failed', message: 'Downstream MCP resource read failed', durationMs: Date.now() - startedAt, data: { serverId, uri, error: errorMessage(error) } })
+      throw error
+    }
+  }
+
+  async listPrompts(serverId?: string): Promise<NamespacedPrompt[]> {
+    const connections = this.connectionsFor(serverId)
+    const results = await Promise.allSettled(connections.map(async ({ connection, state }) => {
+      const response = await connection.client.listPrompts()
+      return response.prompts.map((prompt) => ({
+        name: prompt.name,
+        description: prompt.description,
+        arguments: prompt.arguments?.map((argument) => ({ name: argument.name, description: argument.description, required: argument.required })),
+        serverId: state.id,
+        serverName: state.name
+      }))
+    }))
+    return this.settleCollection(results, 'mcp_prompt_list').sort((left, right) => left.serverName.localeCompare(right.serverName) || left.name.localeCompare(right.name))
+  }
+
+  async getPrompt(serverId: string, name: string, args: Record<string, string> = {}): Promise<unknown> {
+    const { connection } = this.connectionFor(serverId)
+    assertCondition(name.trim().length > 0 && name.length <= 512, 'Prompt name is required and must be at most 512 characters', 'MCP_PROMPT_NAME_INVALID')
+    const startedAt = Date.now()
+    this.logger?.info({ category: 'mcp', action: 'mcp.prompt_get', message: 'Loading downstream MCP prompt', status: 'started', data: { serverId, name, argumentKeys: Object.keys(args) } })
+    try {
+      const response = await connection.client.getPrompt({ name, arguments: args })
+      assertCondition(Buffer.byteLength(JSON.stringify(response)) <= 4_000_000, 'Downstream MCP prompt exceeds the 4 MB response limit', 'MCP_PROMPT_LIMIT')
+      this.logger?.info({ category: 'mcp', action: 'mcp.prompt_get_success', message: 'Downstream MCP prompt loaded', status: 'success', durationMs: Date.now() - startedAt, data: { serverId, name } })
+      return response
+    } catch (error) {
+      this.logger?.error({ category: 'mcp', action: 'mcp.prompt_get_failed', message: 'Downstream MCP prompt load failed', durationMs: Date.now() - startedAt, data: { serverId, name, error: errorMessage(error) } })
+      throw error
+    }
+  }
+
+  private connectionsFor(serverId?: string): Array<{ connection: Connection; state: McpConnectionState }> {
+    if (serverId) {
+      const { connection } = this.connectionFor(serverId)
+      return [{ connection, state: connection.state }]
+    }
+    return [...this.connections.values()].filter((connection) => connection.state.connected).map((connection) => ({ connection, state: connection.state }))
+  }
+
+  private connectionFor(serverId: string): { connection: Connection } {
+    const connection = this.connections.get(serverId)
+    if (!connection) throw new AppError(`MCP server not found: ${serverId}`, 'MCP_SERVER_NOT_FOUND')
+    if (!connection.state.connected) throw new AppError(`MCP server is disconnected: ${connection.state.name}`, 'MCP_SERVER_DISCONNECTED')
+    return { connection }
+  }
+
+  private settleCollection<T>(results: PromiseSettledResult<T[]>[], action: string): T[] {
+    const items: T[] = []
+    for (const result of results) {
+      if (result.status === 'fulfilled') items.push(...result.value)
+      else this.logger?.warn({ category: 'mcp', action: `${action}_partial`, message: 'One downstream MCP server did not return a collection', data: { error: errorMessage(result.reason) } })
+    }
+    return items
   }
 
   private environmentForStdio(custom: Record<string, string>): Record<string, string> {

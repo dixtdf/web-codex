@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Activity, ChevronDown, ChevronUp, CircleStop, Clock3, Download, FolderOpen, Play, RefreshCw, ScrollText, Search, TerminalSquare } from 'lucide-react'
+import { Activity, ChevronDown, ChevronUp, CircleStop, Clock3, Download, FileJson, FolderOpen, Play, RefreshCw, ScrollText, Search, TerminalSquare } from 'lucide-react'
 import type { AuditLogEvent, AuditLogFilter, LogCategory, LogLevel, LogOrigin, LogServiceState, ShellKind } from '../../shared/types'
 import type { Notify } from '../App'
 import { EmptyState, Field, Modal, PageHeader, StatusPill, errorText } from '../components/ui'
@@ -20,6 +20,7 @@ function LogCenter({ notify }: { notify: Notify }) {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
+  const [exportingDiagnostics, setExportingDiagnostics] = useState(false)
 
   const loadLogs = useCallback(async () => {
     try {
@@ -55,6 +56,18 @@ function LogCenter({ notify }: { notify: Notify }) {
     }
   }
 
+  const exportDiagnostics = async (): Promise<void> => {
+    setExportingDiagnostics(true)
+    try {
+      const destination = await window.webCodex.exportDiagnostics()
+      if (destination) notify(`已导出脱敏诊断：${destination}`)
+    } catch (error) {
+      notify(errorText(error), 'error')
+    } finally {
+      setExportingDiagnostics(false)
+    }
+  }
+
   return <section>
     <div className="log-toolbar card">
       <div className="log-search"><Search size={16} /><input aria-label="搜索日志" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索命令、requestId、工具或错误…" /></div>
@@ -63,6 +76,7 @@ function LogCenter({ notify }: { notify: Notify }) {
       <select aria-label="日志级别" value={level} onChange={(event) => setLevel(event.target.value as AuditLogFilter['level'])}><option value="all">全部级别</option>{Object.entries(levelLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
       <button className="icon-button" title="刷新日志" onClick={() => void loadLogs()}><RefreshCw size={17} /></button>
       <button className="button secondary" onClick={() => void window.webCodex.openLogDirectory()}><FolderOpen size={16} />打开目录</button>
+      <button className="button secondary" disabled={exportingDiagnostics} onClick={() => void exportDiagnostics()}><FileJson size={16} />{exportingDiagnostics ? '正在生成…' : '导出诊断'}</button>
       <button className="button primary" disabled={exporting} onClick={() => void exportLogs()}><Download size={16} />{exporting ? '正在导出…' : '导出 JSONL'}</button>
     </div>
     <div className="log-summary"><span><ScrollText size={14} />{events.length} 条匹配事件</span><span>JSONL 持久化 · 保留 {state?.retentionDays ?? 14} 天</span><span className={state?.persistent === false ? 'log-write-error' : ''}>{state?.persistent === false ? `写入异常：${state.lastError}` : '日志写入正常'}</span></div>
@@ -118,7 +132,7 @@ export function ActivityPage({ config, runtime, notify }: PageProps) {
         const project = config.projects.find((item) => item.id === task.projectId)
         const isExpanded = expanded === task.id
         return <article className="card task-card" key={task.id}>
-          <div className="task-summary"><div className={`task-status-icon ${task.status === 'completed' ? 'success' : task.status === 'failed' ? 'error' : ''}`}><TerminalSquare size={17} /></div><div className="task-main"><div className="task-command" title={task.command}>{task.command}</div><div className="task-meta"><span>{project?.name ?? '已移除项目'}</span><span>{task.shell}</span><span><Clock3 size={10} /> {new Date(task.startedAt).toLocaleTimeString()}</span>{task.exitCode !== null && <span>exit {task.exitCode}</span>}</div></div><StatusPill tone={task.status === 'running' ? 'info' : task.status === 'completed' ? 'success' : task.status === 'failed' ? 'danger' : 'neutral'}>{statusText[task.status]}</StatusPill>{task.status === 'running' && <button className="icon-button danger" title="停止任务" onClick={() => void window.webCodex.stopShell(task.id).catch((error) => notify(errorText(error), 'error'))}><CircleStop size={18} /></button>}<button className="icon-button" onClick={() => setExpanded(isExpanded ? null : task.id)} aria-label="查看输出">{isExpanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}</button></div>
+          <div className="task-summary"><div className={`task-status-icon ${task.status === 'completed' ? 'success' : task.status === 'failed' ? 'error' : ''}`}><TerminalSquare size={17} /></div><div className="task-main"><div className="task-command" title={task.command}>{task.command}</div><div className="task-meta"><span>{project?.name ?? '已移除项目'}</span><span>{task.kind === 'process' ? 'process' : task.shell}</span><span><Clock3 size={10} /> {new Date(task.startedAt).toLocaleTimeString()}</span>{task.exitCode !== null && <span>exit {task.exitCode}</span>}</div>{task.stateReason && <p className="field-hint">{task.stateReason}</p>}</div><StatusPill tone={task.status === 'running' ? 'info' : task.status === 'completed' ? 'success' : task.status === 'failed' ? 'danger' : 'neutral'}>{statusText[task.status]}</StatusPill>{task.status === 'running' && <button className="icon-button danger" title="停止任务" onClick={() => void window.webCodex.stopShell(task.id).catch((error) => notify(errorText(error), 'error'))}><CircleStop size={18} /></button>}<button className="icon-button" onClick={() => setExpanded(isExpanded ? null : task.id)} aria-label="查看输出">{isExpanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}</button></div>
           {isExpanded && <div className="task-output">{task.stdout && <pre>{task.stdout}</pre>}{task.stderr && <div className="stderr"><pre>{task.stderr}</pre></div>}{!task.stdout && !task.stderr && <pre>暂无输出</pre>}{task.truncated && <p className="field-hint">输出已达到上限，较早内容仍保留在当前缓冲区中。</p>}</div>}
         </article>
       })}

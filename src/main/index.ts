@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { writeFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { app, BrowserWindow, dialog, ipcMain, Menu, Tray } from 'electron/main'
@@ -191,6 +192,20 @@ function registerIpc(current: Runtime): void {
   })
   handle('logs:open-directory', async () => {
     await shell.openPath(current.logs.directory)
+  })
+  handle('diagnostics:get', (_event, projectId?: string) => current.diagnostics(projectId))
+  handle('diagnostics:export', async (_event, projectId?: string) => {
+    if (!mainWindow) return null
+    const selected = await dialog.showSaveDialog(mainWindow, {
+      title: '导出脱敏连接诊断',
+      defaultPath: join(app.getPath('documents'), `web-codex-diagnostics-${new Date().toISOString().slice(0, 10)}.json`),
+      filters: [{ name: 'JSON 诊断报告', extensions: ['json'] }]
+    })
+    if (selected.canceled || !selected.filePath) return null
+    const report = await current.diagnostics(projectId)
+    await writeFile(selected.filePath, `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 })
+    current.logs.info({ category: 'app', action: 'diagnostics.exported', message: 'Redacted diagnostics exported', status: 'success', data: { destination: selected.filePath } })
+    return selected.filePath
   })
   handle('app:open-external', async (_event, url: string) => {
     const parsed = new URL(url)

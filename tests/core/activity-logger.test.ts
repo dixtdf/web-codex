@@ -35,6 +35,12 @@ describe('ActivityLogger JSONL persistence', () => {
           content: 'raw-file-content',
           headers: { Authorization: 'Bearer header-secret' },
           token: 'object-secret',
+          _meta: {
+            'openai/subject': 'subject-secret',
+            'openai/session': 'session-secret',
+            'openai/userLocation': { city: 'PrivateCity' },
+            timezone: 'Private/Zone'
+          },
           safe: true
         }
       })
@@ -61,13 +67,76 @@ describe('ActivityLogger JSONL persistence', () => {
     expect(events[2]).toMatchObject({ level: 'error', origin: 'local', status: 'error' })
     expect(raw).toContain('curl --token [REDACTED] --api-key=[REDACTED]')
     expect(raw).toContain('"content":{"omitted":true,"bytes":16,"sha256":')
-    for (const secret of ['configured-secret', 'cli-secret', 'assigned-secret', 'header-secret', 'object-secret', 'raw-file-content']) {
+    for (const secret of ['configured-secret', 'cli-secret', 'assigned-secret', 'header-secret', 'object-secret', 'raw-file-content', 'subject-secret', 'session-secret', 'PrivateCity', 'Private/Zone']) {
       expect(raw).not.toContain(secret)
     }
 
     expect(logger.list({ category: 'shell', origin: 'remote', level: 'info', query: 'shell.start', limit: 1 })).toEqual([events[0]])
     expect(logger.list({ category: 'all', origin: 'all', level: 'all', limit: 0 })).toHaveLength(1)
     expect(logger.getState()).toEqual({ directory, persistent: true, retentionDays: 14, lastError: undefined })
+  })
+
+  it('scrubs previously persisted ChatGPT identity, session, location, and timezone metadata', async () => {
+    await mkdir(directory, { recursive: true })
+    const legacy = auditEvent('gateway.request')
+    legacy.data = {
+      body: {
+        params: {
+          _meta: {
+            'openai/subject': 'legacy-subject',
+            'openai/session': 'legacy-session',
+            'openai/organization': 'legacy-organization',
+            'openai/userLocation': { city: 'LegacyCity', country: 'XX' },
+            timezone: 'Legacy/Zone',
+            timezone_offset_minutes: -480
+          }
+        }
+      }
+    }
+    await writeFile(join(directory, `audit-${new Date().toISOString().slice(0, 10)}.jsonl`), `${JSON.stringify(legacy)}\n`)
+
+    const logger = new ActivityLogger(directory)
+    await logger.initialize()
+    const raw = await readAuditText()
+    for (const secret of ['legacy-subject', 'legacy-session', 'legacy-organization', 'LegacyCity', 'Legacy/Zone', '-480']) {
+      expect(raw).not.toContain(secret)
+    }
+    expect(raw).toContain('"openai/subject":"[REDACTED]"')
+    expect(raw).toContain('"timezone_offset_minutes":"[REDACTED]"')
+  })
+
+  it('redacts Tunnel IDs from new and legacy audit records', async () => {
+    const tunnelId = 'tunnel_0123456789abcdef0123456789abcdef'
+    const logger = new ActivityLogger(directory)
+    await logger.initialize()
+    logger.info({
+      category: 'tunnel',
+      action: 'tunnel.start',
+      message: `Starting Tunnel ${tunnelId}`,
+      data: {
+        tunnel_id: tunnelId,
+        TUNNEL_ID: tunnelId,
+        command: `tunnel-client run --tunnel-id ${tunnelId}`,
+        requestId: 'keep-me'
+      }
+    })
+    await logger.flush()
+    expect(await readAuditText()).not.toContain(tunnelId)
+
+    const legacy = auditEvent('tunnel.legacy')
+    legacy.message = `Legacy Tunnel ${tunnelId}`
+    legacy.requestId = 'legacy-request'
+    legacy.data = { tunnelId, command: `run ${tunnelId}`, keep: 'visible' }
+    await writeFile(join(directory, `audit-${new Date().toISOString().slice(0, 10)}.jsonl`), JSON.stringify(legacy) + String.fromCharCode(10), { flag: 'a' })
+
+    const reloaded = new ActivityLogger(directory)
+    await reloaded.initialize()
+    const raw = await readAuditText()
+    expect(raw).not.toContain(tunnelId)
+    expect(raw).toContain('[REDACTED]')
+    expect(raw).toContain('legacy-request')
+    expect(raw).toContain('"keep":"visible"')
+    expect(raw).toContain('tunnel.legacy')
   })
 
   it('redacts common credential forms and summarizes complex values without raw content', async () => {

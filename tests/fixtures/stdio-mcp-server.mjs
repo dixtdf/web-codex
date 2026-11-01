@@ -11,4 +11,21 @@ server.registerTool('echo', {
   structuredContent: { transport: 'stdio', text, fixtureValue: process.env.FIXTURE_VALUE ?? null }
 }))
 
+server.registerResource('fixture-resource', 'fixture://readme', {
+  title: 'Fixture resource',
+  description: 'A fixture text resource',
+  mimeType: 'text/plain'
+}, async (uri) => ({
+  contents: [{ uri: uri.href, mimeType: 'text/plain', text: 'fixture-resource-body' }]
+}))
+
+server.registerPrompt('greet', {
+  title: 'Greeting prompt',
+  description: 'Greets a named user',
+  argsSchema: { name: z.string() }
+}, async ({ name }) => ({
+  description: 'A fixture greeting',
+  messages: [{ role: 'user', content: { type: 'text', text: `Hello ${name}` } }]
+}))
+
 await server.connect(new StdioServerTransport())

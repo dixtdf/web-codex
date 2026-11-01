@@ -75,6 +75,10 @@ export interface UiSettings {
   startMinimized: boolean
 }
 
+export interface LimitSettings {
+  maxConcurrentTasks: number
+}
+
 export interface AppConfig {
   version: 1
   projects: Project[]
@@ -83,6 +87,7 @@ export interface AppConfig {
   gateway: GatewaySettings
   tunnel: TunnelSettings
   ui: UiSettings
+  limits: LimitSettings
 }
 
 export interface ProxyState {
@@ -127,7 +132,10 @@ export interface ShellTask {
   id: string
   projectId: string
   command: string
-  shell: Exclude<ShellKind, 'auto'>
+  kind: 'shell' | 'process'
+  shell: Exclude<ShellKind, 'auto'> | 'process'
+  executable?: string
+  args?: string[]
   cwd: string
   status: 'running' | 'completed' | 'failed' | 'stopped'
   pid?: number
@@ -138,6 +146,30 @@ export interface ShellTask {
   stdout: string
   stderr: string
   truncated: boolean
+  stdinOpen: boolean
+  idempotencyKey?: string
+  stateReason?: string
+}
+
+export type ShellTaskSummary = Omit<ShellTask, 'stdout' | 'stderr'> & {
+  stdoutBytes: number
+  stderrBytes: number
+}
+
+export interface ShellTaskListResult {
+  tasks: ShellTaskSummary[]
+  nextCursor: string | null
+}
+
+export interface ShellOutputChunk {
+  taskId: string
+  stream: 'stdout' | 'stderr'
+  offset: number
+  requestedOffset: number
+  nextOffset: number
+  totalBytes: number
+  data: string
+  eof: boolean
 }
 
 export interface McpConnectionState {
@@ -165,6 +197,7 @@ export interface SecretStorageState {
 }
 
 export interface RuntimeSnapshot {
+  appVersion: string
   gateway: ServiceState
   tunnel: TunnelState
   proxy: ProxyState

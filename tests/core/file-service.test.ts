@@ -56,9 +56,10 @@ describe('FileService project boundaries', () => {
 
 describe('FileService reads and writes', () => {
   it('creates parent folders, writes UTF-8, and lists files with stable metadata', async () => {
-    await expect(files.write(project.id, 'docs/nested/hello.txt', '你好，Codex')).resolves.toEqual({
+    await expect(files.write(project.id, 'docs/nested/hello.txt', '你好，Codex')).resolves.toMatchObject({
       path: 'docs/nested/hello.txt',
-      bytes: Buffer.byteLength('你好，Codex')
+      bytes: Buffer.byteLength('你好，Codex'),
+      sha256: expect.stringMatching(/^[a-f0-9]{64}$/)
     })
     await files.createDirectory(project.id, 'empty')
 
@@ -75,17 +76,19 @@ describe('FileService reads and writes', () => {
   it('reads bounded chunks using byte offsets and reports truncation accurately', async () => {
     await files.write(project.id, 'large.txt', 'abcdef')
 
-    await expect(files.read(project.id, 'large.txt', 3, 1)).resolves.toEqual({
+    await expect(files.read(project.id, 'large.txt', 3, 1)).resolves.toMatchObject({
       path: 'large.txt',
       content: 'bcd',
       size: 6,
-      truncated: true
+      truncated: true,
+      sha256: expect.stringMatching(/^[a-f0-9]{64}$/)
     })
-    await expect(files.read(project.id, 'large.txt', 10, 4)).resolves.toEqual({
+    await expect(files.read(project.id, 'large.txt', 10, 4)).resolves.toMatchObject({
       path: 'large.txt',
       content: 'ef',
       size: 6,
-      truncated: false
+      truncated: false,
+      sha256: expect.stringMatching(/^[a-f0-9]{64}$/)
     })
     await expect(files.read(project.id, 'large.txt', 10, 20)).resolves.toMatchObject({ content: '', truncated: false })
   })
@@ -101,16 +104,16 @@ describe('FileService reads and writes', () => {
   it('patches exact text and enforces the expected replacement count', async () => {
     await files.write(project.id, 'patch.txt', 'alpha beta alpha')
 
-    await expect(files.patch(project.id, 'patch.txt', 'beta', 'gamma')).resolves.toEqual({ path: 'patch.txt', replacements: 1 })
+    await expect(files.patch(project.id, 'patch.txt', 'beta', 'gamma')).resolves.toMatchObject({ path: 'patch.txt', replacements: 1, changed: true, dryRun: false, beforeSha256: expect.stringMatching(/^[a-f0-9]{64}$/), afterSha256: expect.stringMatching(/^[a-f0-9]{64}$/) })
     expect(await readFile(join(projectRoot, 'patch.txt'), 'utf8')).toBe('alpha gamma alpha')
-    await expect(files.patch(project.id, 'patch.txt', 'alpha', 'x', 2)).resolves.toEqual({ path: 'patch.txt', replacements: 2 })
+    await expect(files.patch(project.id, 'patch.txt', 'alpha', 'x', 2)).resolves.toMatchObject({ path: 'patch.txt', replacements: 2, changed: true, dryRun: false })
     await expect(files.patch(project.id, 'patch.txt', 'missing', 'x')).rejects.toMatchObject({ code: 'PATCH_MATCH_MISMATCH' })
     await expect(files.patch(project.id, 'patch.txt', '', 'x')).rejects.toMatchObject({ code: 'PATCH_EMPTY_SOURCE' })
   })
 
   it('moves and removes files without changing content', async () => {
     await files.write(project.id, 'source.txt', 'payload')
-    await expect(files.move(project.id, 'source.txt', 'archive/renamed.txt')).resolves.toEqual({ path: 'archive/renamed.txt' })
+    await expect(files.move(project.id, 'source.txt', 'archive/renamed.txt')).resolves.toMatchObject({ path: 'archive/renamed.txt', overwritten: false, beforeSha256: null })
     await expect(files.read(project.id, 'archive/renamed.txt')).resolves.toMatchObject({ content: 'payload' })
 
     await files.remove(project.id, 'archive/renamed.txt')
@@ -127,18 +130,34 @@ describe('FileService search', () => {
     await files.write(project.id, 'node_modules/ignored.txt', 'Alpha')
     await writeFile(join(projectRoot, 'src', 'image.png'), Buffer.from([0, 1]))
 
-    expect(await files.search(project.id, 'alpha')).toEqual([
+    expect((await files.search(project.id, 'alpha')).matches).toEqual([
       { path: 'src/a.txt', line: 1, column: 1, preview: 'Alpha beta' },
       { path: 'src/a.txt', line: 2, column: 8, preview: 'second Alpha' },
       { path: 'src/b.md', line: 1, column: 1, preview: 'alpha only' }
     ])
-    expect(await files.search(project.id, 'alpha', { caseSensitive: true })).toEqual([
+    expect((await files.search(project.id, 'alpha', { caseSensitive: true })).matches).toEqual([
       { path: 'src/b.md', line: 1, column: 1, preview: 'alpha only' }
     ])
-    expect(await files.search(project.id, 'A[a-z]+a', { regex: true, maxResults: 1 })).toHaveLength(1)
-    expect(await files.search(project.id, 'second', { path: 'src/a.txt' })).toEqual([
+    const limited = await files.search(project.id, 'A[a-z]+a', { regex: true, maxResults: 1 })
+    expect(limited.matches).toHaveLength(1)
+    expect(limited.nextCursor).toBe('1')
+    expect((await files.search(project.id, 'second', { path: 'src/a.txt' })).matches).toEqual([
       { path: 'src/a.txt', line: 2, column: 1, preview: 'second Alpha' }
     ])
+  })
+
+  it('paginates stable search results and rejects invalid cursors', async () => {
+    await files.write(project.id, 'a.txt', 'needle')
+    await files.write(project.id, 'b.txt', 'needle')
+    await files.write(project.id, 'c.txt', 'needle')
+
+    const first = await files.search(project.id, 'needle', { maxResults: 1 })
+    expect(first).toEqual({ matches: [{ path: 'a.txt', line: 1, column: 1, preview: 'needle' }], nextCursor: '1' })
+    const second = await files.search(project.id, 'needle', { maxResults: 1, cursor: first.nextCursor as string })
+    expect(second).toEqual({ matches: [{ path: 'b.txt', line: 1, column: 1, preview: 'needle' }], nextCursor: '2' })
+    const third = await files.search(project.id, 'needle', { maxResults: 1, cursor: second.nextCursor as string })
+    expect(third).toEqual({ matches: [{ path: 'c.txt', line: 1, column: 1, preview: 'needle' }], nextCursor: null })
+    await expect(files.search(project.id, 'needle', { cursor: 'invalid' })).rejects.toMatchObject({ code: 'SEARCH_CURSOR_INVALID' })
   })
 
   it('skips binary and oversized files and validates search input', async () => {
@@ -146,7 +165,7 @@ describe('FileService search', () => {
     await writeFile(join(projectRoot, 'large.txt'), `needle${'x'.repeat(1_000_001)}`)
     await writeFile(join(projectRoot, 'nul.txt'), Buffer.from('needle\0hidden'))
 
-    expect(await files.search(project.id, 'needle')).toEqual([
+    expect((await files.search(project.id, 'needle')).matches).toEqual([
       { path: 'small.txt', line: 1, column: 1, preview: 'needle' }
     ])
     await expect(files.search(project.id, '')).rejects.toMatchObject({ code: 'SEARCH_QUERY_REQUIRED' })

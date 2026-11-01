@@ -56,6 +56,18 @@ describe('ProjectService registration', () => {
     await expect(projects.create({ path: join(temporaryDirectory, 'absent'), createDirectory: false })).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
+  it('reports live project health without changing the enabled registration state', async () => {
+    const ready = await projects.create({ path: join(temporaryDirectory, 'ready') })
+    const missing = await projects.create({ path: join(temporaryDirectory, 'missing') })
+    await rm(missing.path, { recursive: true, force: true })
+
+    const health = await projects.listWithHealth()
+    expect(health).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: ready.id, health: { accessible: true, status: 'ready', error: null } }),
+      expect.objectContaining({ id: missing.id, enabled: true, health: { accessible: false, status: 'unavailable', error: expect.any(String) } })
+    ]))
+  })
+
   it('updates project metadata and canonical paths while preserving registration history', async () => {
     const original = await projects.create({ path: join(temporaryDirectory, 'original') })
     const replacementPath = join(temporaryDirectory, 'replacement')

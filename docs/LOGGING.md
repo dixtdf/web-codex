@@ -64,8 +64,9 @@ logs/audit-YYYY-MM-DD-0001.jsonl
 ## What is recorded
 
 - Gateway start, listen address, stop, authentication rejection, HTTP methods, remote requests, responses, tool outcomes, and errors.
-- Tunnel credential-presence checks, internal launcher start, PID, stdout, stderr, readiness/error lines, exit code/signal, and stop operations. Tunnel ID is recorded only when operationally necessary; API keys are always redacted.
-- Downstream MCP configuration changes, connect/disconnect, transport errors, stdio stderr, tool names, argument keys, outcomes, and durations.
+- Tunnel credential-presence checks, internal launcher start, PID, stdout, stderr, readiness/error lines, exit code/signal, and stop operations. Tunnel IDs are redacted from messages and structured command data; API keys are always redacted.
+- Downstream MCP configuration changes, connect/disconnect, transport errors, stdio stderr, tool/resource URIs, prompt names, argument keys, outcomes, and durations. Resource and prompt bodies are not copied into logs.
+- Structured process launches, Git operations through Gateway tool outcomes, host/diagnostic reads, and redacted diagnostic exports.
 - Shell command text after redaction, shell type, working directory, task ID, timeout, stop, exit status, output byte counts, and truncation state.
 - Desktop IPC operation inputs after redaction, success, failure, and duration.
 - Configuration section names, privilege state, emergency stop, and proxy changes.
@@ -77,8 +78,10 @@ High-frequency configuration/runtime reads and log-center queries are deliberate
 Before an event is emitted or persisted:
 
 - Gateway tokens, configured downstream secrets, Bearer credentials, common API keys, passwords, JWTs, OAuth URL codes, and URL userinfo are replaced with `[REDACTED]`.
+- OpenAI Tunnel IDs matching the `tunnel_` pattern and `tunnel_id`/`TUNNEL_ID` key/value forms are replaced with `[REDACTED]` in new events and in retained JSONL files scrubbed during initialization.
+- ChatGPT request metadata keys beginning with `openai/` and timezone fields are replaced with `[REDACTED]`; retained files from older builds are scrubbed during initialization.
 - Sensitive object keys, request headers, and environment-variable objects are redacted.
-- `content`, `oldText`, and `newText` are replaced by byte length and SHA-256; raw file and patch content is not written.
+- `content`, `oldText`, `newText`, and Base64 binary chunks are replaced by byte length and SHA-256; raw file, patch, and binary content is not written.
 - Downstream MCP argument values are not persisted; tool name and argument keys are retained.
 - Strings are bounded, deeply nested/circular structures are summarized, and buffers become byte/hash summaries.
 

@@ -33,6 +33,9 @@ export function createDefaultConfig(): AppConfig {
     ui: {
       theme: 'system',
       startMinimized: false
+    },
+    limits: {
+      maxConcurrentTasks: 20
     }
   }
 }
@@ -46,9 +49,10 @@ function mergeConfig(saved: Partial<AppConfig>): AppConfig {
     projects: Array.isArray(saved.projects) ? saved.projects : defaults.projects,
     mcpServers: Array.isArray(saved.mcpServers) ? saved.mcpServers : defaults.mcpServers,
     network: { ...defaults.network, ...saved.network },
-    gateway: { ...defaults.gateway, ...saved.gateway },
+    gateway: { ...defaults.gateway, ...saved.gateway, authToken: saved.gateway?.authToken || defaults.gateway.authToken },
     tunnel: { ...defaults.tunnel, ...saved.tunnel },
-    ui: { ...defaults.ui, ...saved.ui }
+    ui: { ...defaults.ui, ...saved.ui },
+    limits: { ...defaults.limits, ...saved.limits }
   }
 }
 

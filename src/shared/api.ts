@@ -58,6 +58,8 @@ export interface WebCodexApi {
   getLogState(): Promise<LogServiceState>
   exportLogs(): Promise<{ files: number; destination: string } | null>
   openLogDirectory(): Promise<void>
+  getDiagnostics(projectId?: string): Promise<Record<string, unknown>>
+  exportDiagnostics(projectId?: string): Promise<string | null>
   listUploads(): Promise<UploadItem[]>
   selectUploadFiles(): Promise<UploadItem[]>
   addUploadFiles(paths: string[]): Promise<UploadItem[]>

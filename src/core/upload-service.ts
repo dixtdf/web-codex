@@ -63,10 +63,10 @@ export class UploadService {
     this.logger?.info({ category: 'file', action: 'upload.removed', message: `Attachment removed: ${item.originalName}`, data: { uploadId: id, originalName: item.originalName } })
   }
 
-  async copyToProject(id: string, projectId: string, destinationPath: string): Promise<{ path: string; bytes: number; sha256: string }> {
+  async copyToProject(id: string, projectId: string, destinationPath: string, onConflict: 'fail' | 'overwrite' | 'rename' = 'fail'): Promise<{ path: string; bytes: number; sha256: string; conflict: 'none' | 'overwritten' | 'renamed' }> {
     const item = await this.get(id)
-    const result = await this.files.copyBinary(projectId, join(this.directory, id, item.originalName), destinationPath)
-    this.logger?.info({ category: 'file', action: 'upload.copied', message: `Attachment copied to project: ${item.originalName}`, projectId, data: { uploadId: id, originalName: item.originalName, destination: result.path, sha256: result.sha256 } })
+    const result = await this.files.copyBinary(projectId, join(this.directory, id, item.originalName), destinationPath, onConflict)
+    this.logger?.info({ category: 'file', action: 'upload.copied', message: `Attachment copied to project: ${item.originalName}`, projectId, data: { uploadId: id, originalName: item.originalName, destination: result.path, sha256: result.sha256, conflict: result.conflict } })
     return result
   }
 

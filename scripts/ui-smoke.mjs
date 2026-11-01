@@ -89,7 +89,8 @@ await waitFor(`window.webCodex && document.querySelector('.main-nav')`)
 await evaluate(`[...document.querySelectorAll('.main-nav button')].find((button) => button.textContent.includes('首页')).click()`)
 await waitFor(`document.querySelector('.hero')`)
 const pages = []
-const report = { startedAt: new Date().toISOString(), pages, exceptions, consoleErrors, checks: {} }
+const appVersion = await evaluate(`window.webCodex.getRuntime().then((snapshot) => snapshot.appVersion)`)
+const report = { startedAt: new Date().toISOString(), appVersion, pages, exceptions, consoleErrors, checks: {} }
 
 try {
   await capture('web-codex-home')
@@ -129,6 +130,13 @@ try {
   })()`)
   if (discovery.status !== 200 || discovery.body.result?.resultType !== 'complete' || !discovery.body.result?.supportedVersions?.includes('2026-07-28')) throw new Error(`Installed server/discover failed: ${JSON.stringify(discovery)}`)
   report.checks.serverDiscover = true
+  const listed = await evaluate(`(async () => {
+    const connection = await window.webCodex.getConnectionInfo()
+    const response = await fetch(connection.localAddress, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: 'Bearer ' + connection.token }, body: JSON.stringify({ jsonrpc: '2.0', id: 'ui-tools', method: 'tools/list', params: {} }) })
+    return { status: response.status, body: await response.json() }
+  })()`)
+  if (listed.status !== 200 || !Array.isArray(listed.body.result?.tools) || listed.body.result.tools.length !== 58) throw new Error(`Unexpected installed tool count: ${listed.body.result?.tools?.length}`)
+  report.checks.toolCount58 = true
   const trayLogs = await evaluate(`window.webCodex.listLogs({ query: 'tray.created', limit: 10 }).then((items) => items.length)`)
   report.checks.trayIntegrated = trayLogs > 0
 
@@ -145,6 +153,11 @@ try {
   await evaluate(`document.querySelector('.log-event-summary').click()`)
   await waitFor(`document.querySelector('.log-event-detail')`)
   report.checks.logCenter = true
+  const diagnostics = await evaluate(`window.webCodex.getDiagnostics()`)
+  const diagnosticsJson = JSON.stringify(diagnostics)
+  if (!diagnostics?.generatedAt || !diagnostics?.app?.version || !Array.isArray(diagnostics?.recentLogs)) throw new Error('Redacted diagnostics are incomplete')
+  if (diagnosticsJson.includes('authToken') || diagnosticsJson.includes('apiKey') || diagnosticsJson.includes('"stdout":')) throw new Error('Diagnostics contain secret or task output fields')
+  report.checks.redactedDiagnostics = true
 
   await navigate('设置', '设置')
   pages.push(await inspectPage('settings'))
@@ -156,6 +169,12 @@ try {
   const secretStorage = await evaluate(`window.webCodex.getRuntime().then((snapshot) => snapshot.secrets)`)
   if (!secretStorage || secretStorage.mode !== 'os-protected') throw new Error('OS-protected secret storage is not active')
   report.checks.osProtectedSecrets = true
+  const concurrencyInput = await evaluate(`(() => { const input = [...document.querySelectorAll('input[type="number"]')].find((item) => item.closest('.settings-section')?.textContent.includes('并发任务上限')); return input ? { value: Number(input.value), min: Number(input.min), max: Number(input.max) } : null })()`)
+  if (!concurrencyInput || concurrencyInput.value < 1 || concurrencyInput.min !== 1 || concurrencyInput.max !== 200) throw new Error('Concurrency limit setting is missing or invalid')
+  const updatedLimit = await evaluate(`window.webCodex.updateConfig({ limits: { maxConcurrentTasks: 19 } }).then((config) => config.limits.maxConcurrentTasks)`)
+  if (updatedLimit !== 19) throw new Error('Concurrency limit IPC update failed')
+  await evaluate(`window.webCodex.updateConfig({ limits: { maxConcurrentTasks: 20 } })`)
+  report.checks.concurrencySetting = true
   await capture('web-codex-settings')
 
   const projectPath = await mkdtemp(join(tmpdir(), 'web-codex-ui-'))

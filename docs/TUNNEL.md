@@ -59,9 +59,11 @@ Use **任务与日志 → 审计日志 → Tunnel** to inspect client checks, in
 | 2026-10-31 | `codex-cli 0.152.1 tunnel --help` | No Tunnel subcommand; not the bundled client |
 | 2026-10-31 | Bundled `tunnel-client 0.0.19 run --help` | Official `run`, MCP, control-plane, and health options verified |
 | 2026-10-31 | `tunnel-client init --sample sample_mcp_remote_no_auth` | Profile generated with loopback MCP URL and `env:CONTROL_PLANE_API_KEY` |
-| 2026-10-31 | Packaged app with authorized saved credentials | `readyz` returned `200 ready`; `healthz` returned `200 live` |
-| 2026-10-31 | Authenticated local Gateway `tools/list` | HTTP 200, 17 tools, `project_list` present |
-| 2026-10-31 | Official `dev proxy` + real Runtime | External initialize, 17-tool discovery, and `project_list` all passed; `artifacts/official-tunnel-report.json` |
-| Not run | Interactive ChatGPT Connector `project_list` | Not automated; requires the user-facing ChatGPT session |
+| 2026-10-31 | Packaged app with authorized saved credentials | `readyz` returned `200 ready` (persisted log evidence); `healthz` returned `200 live` by direct manual observation only, with no persisted log evidence |
+| 2026-10-31 | Authenticated local Gateway `tools/list` | HTTP 200, 58 tools, `project_list` present |
+| 2026-10-31 | Official `dev proxy` + real Runtime | External initialize, 58-tool discovery, resources/prompts, and `project_list` all passed; `artifacts/official-tunnel-report.json` |
+| 2026-10-31 15:18:43 UTC | Interactive ChatGPT `project_list` | HTTP 200 in persisted JSONL, `requestId=0`; project list and context read succeeded |
+| 2026-10-31 15:31:39 UTC | Interactive remote `file_write` | HTTP 200 in persisted JSONL, `requestId=0`; README content was written successfully |
+| 2026-10-31 | Interactive ChatGPT Desktop plugin overall | Remote workspace connection, project discovery, file listing/reading, PowerShell execution, and text-file write all succeeded |
 
-A live local Tunnel ready state is verified. No interactive ChatGPT Connector success is claimed without a real project request from that session.
+A live local Tunnel ready state and interactive remote project discovery/text writing are verified from persisted audit evidence. Complete binary transfer was initially unavailable and is now covered by chunked transfer plus the attachment inbox.

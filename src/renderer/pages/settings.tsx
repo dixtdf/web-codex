@@ -9,6 +9,7 @@ export function SettingsPage({ config, runtime, notify, refresh }: PageProps) {
   const [manualProxy, setManualProxy] = useState(config.network.manualProxy ?? '')
   const [noProxy, setNoProxy] = useState(config.network.noProxy)
   const [startMinimized, setStartMinimized] = useState(config.ui.startMinimized)
+  const [maxConcurrentTasks, setMaxConcurrentTasks] = useState(config.limits.maxConcurrentTasks)
   const [busy, setBusy] = useState(false)
 
   const save = async (event: FormEvent): Promise<void> => {
@@ -17,7 +18,8 @@ export function SettingsPage({ config, runtime, notify, refresh }: PageProps) {
     try {
       await window.webCodex.updateConfig({
         network: { ...config.network, mode, manualProxy: manualProxy.trim() || undefined, noProxy },
-        ui: { ...config.ui, startMinimized }
+        ui: { ...config.ui, startMinimized },
+        limits: { ...config.limits, maxConcurrentTasks }
       })
       await refresh()
       notify('设置已保存，网络配置会自动生效')
@@ -43,6 +45,8 @@ export function SettingsPage({ config, runtime, notify, refresh }: PageProps) {
         {mode === 'manual' && <Field label="代理地址" hint="支持 http:// 或 https:// 代理地址。"><input className="mono" value={manualProxy} onChange={(event) => setManualProxy(event.target.value)} placeholder="http://127.0.0.1:7890" /></Field>}
         <Field label="NO_PROXY" hint="使用逗号分隔。localhost 和 127.0.0.1 始终绕过代理。"><input className="mono" value={noProxy} onChange={(event) => setNoProxy(event.target.value)} /></Field>
       </div></section>
+
+      <section className="card settings-section"><div className="card-header"><div><h3>任务并发</h3><p>限制同时运行的终端与结构化进程任务数量。</p></div><SlidersHorizontal size={18} /></div><div className="card-body"><Field label="并发任务上限" hint="整数 1-200，默认 20；调整不会终止正在运行的任务。"><input type="number" min={1} max={200} step={1} className="mono" value={maxConcurrentTasks} onChange={(event) => setMaxConcurrentTasks(Number(event.target.value))} /></Field></div></section>
 
       <section className="card settings-section"><div className="card-header"><div><h3>权限与数据</h3><p>清楚了解应用正在使用的能力。</p></div><ShieldCheck size={18} /></div><div className="card-body"><div className="settings-inline"><div><h4>{runtime.privileged ? '管理员完全访问' : '当前用户访问'}</h4><p>{runtime.privileged ? '应用已获得管理员权限，终端可以执行需要提权的开发命令。' : 'Windows 安装版启动时会请求 UAC；当前进程未检测到管理员令牌。'}</p></div><StatusPill tone={runtime.privileged ? 'success' : 'warning'}>{runtime.privileged ? '管理员模式' : '标准模式'}</StatusPill></div><div className="settings-inline"><div><h4>{runtime.secrets.mode === 'os-protected' ? '操作系统加密密钥存储' : '仅内存保存密钥'}</h4><p>{runtime.secrets.mode === 'os-protected' ? 'Gateway、Tunnel 和下游 MCP 密钥在写入配置前使用当前系统用户密钥加密。' : '系统加密不可用，密钥不会明文写入磁盘，重启后需要重新填写。'}</p></div><StatusPill tone={runtime.secrets.mode === 'os-protected' ? 'success' : 'warning'}>{runtime.secrets.mode === 'os-protected' ? '已加密' : '不持久化'}</StatusPill></div></div></section>
 

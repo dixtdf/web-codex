@@ -51,6 +51,10 @@ describe('FileService binary transfer', () => {
     await expect(files.writeBinary(project.id, 'bad.bin', Buffer.from('z').toString('base64'), { offset: 99 })).rejects.toMatchObject({ code: 'FILE_OFFSET_MISMATCH' })
     await expect(files.writeBinary(project.id, 'bad.bin', Buffer.from('abc').toString('base64'), { expectedSha256: '0'.repeat(64) })).rejects.toMatchObject({ code: 'FILE_HASH_MISMATCH' })
     await expect(files.readBinary(project.id, 'bad.bin', 99)).rejects.toMatchObject({ code: 'FILE_OFFSET_INVALID' })
+
+    await files.write(project.id, 'guarded.bin', 'safe-content')
+    await expect(files.writeBinary(project.id, 'guarded.bin', Buffer.from('corrupt').toString('base64'), { expectedSha256: '0'.repeat(64) })).rejects.toMatchObject({ code: 'FILE_HASH_MISMATCH' })
+    expect(await readFile(join(project.path, 'guarded.bin'), 'utf8')).toBe('safe-content')
   })
 })
 

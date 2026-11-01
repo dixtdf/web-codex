@@ -14,6 +14,23 @@ import { ActivityLogger } from './activity-logger'
 import { errorMessage } from './errors'
 import type { SecretProtector } from './secret-protector'
 import { UploadService } from './upload-service'
+import { GitService } from './git-service'
+import { HostService } from './host-service'
+import packageJson from '../../package.json'
+
+function sanitizeEndpoint(value: string | null | undefined): string | null {
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    url.username = ''
+    url.password = ''
+    url.search = ''
+    url.hash = ''
+    return url.toString()
+  } catch {
+    return value.replace(/\/\/[^/@\s]+@/, '//[REDACTED]@').replace(/([?&](?:token|key|code|state|session|secret)=)[^&\s]+/gi, '$1[REDACTED]')
+  }
+}
 
 export class Runtime extends EventEmitter {
   readonly store: ConfigStore
@@ -26,6 +43,8 @@ export class Runtime extends EventEmitter {
   readonly gateway: McpGateway
   readonly tunnel: TunnelManager
   readonly uploads: UploadService
+  readonly git: GitService
+  readonly host: HostService
   privileged = false
 
   constructor(configPath: string, protector?: SecretProtector) {
@@ -33,12 +52,14 @@ export class Runtime extends EventEmitter {
     this.store = new ConfigStore(configPath, protector)
     this.logs = new ActivityLogger(join(dirname(configPath), 'logs'), { secrets: () => this.auditSecrets() })
     this.projects = new ProjectService(this.store)
-    this.files = new FileService(this.projects)
-    this.shell = new ShellService(this.projects, this.logs)
+    this.files = new FileService(this.projects, { trashDirectory: join(dirname(configPath), 'trash') })
+    this.shell = new ShellService(this.projects, this.logs, { statePath: join(dirname(configPath), 'tasks.json'), maxConcurrentTasks: 20 })
     this.proxy = new ProxyManager(this.store, this.logs)
+    this.git = new GitService(this.projects)
+    this.host = new HostService(this.projects, this.proxy, () => this.privileged)
     this.hub = new McpHub(this.store, this.proxy, this.logs)
     this.uploads = new UploadService(join(dirname(configPath), 'uploads'), this.files, this.logs)
-    this.gateway = new McpGateway({ store: this.store, projects: this.projects, files: this.files, shell: this.shell, hub: this.hub, uploads: this.uploads, logger: this.logs })
+    this.gateway = new McpGateway({ store: this.store, projects: this.projects, files: this.files, shell: this.shell, hub: this.hub, uploads: this.uploads, git: this.git, host: this.host, logger: this.logs })
     this.tunnel = new TunnelManager(this.store, this.proxy, this.logs)
     const notify = (): void => {
       this.emit('change', this.snapshot())
@@ -56,8 +77,10 @@ export class Runtime extends EventEmitter {
 
   async initialize(): Promise<void> {
     await this.store.load()
+    this.shell.setConcurrencyLimit(this.store.get().limits.maxConcurrentTasks)
     await this.uploads.initialize()
     await this.logs.initialize()
+    await this.shell.initialize()
     this.logs.info({ category: 'app', action: 'runtime.initialized', message: 'Runtime initialized', origin: 'system', data: { platform: process.platform, arch: process.arch, versions: { electron: process.versions.electron, node: process.version } } })
     this.logs.info({ category: 'security', action: 'security.secrets_storage', message: 'Secret storage initialized', origin: 'system', data: { mode: this.store.protectionState().mode, persistent: this.store.protectionState().persistent } })
     await this.proxy.detect()
@@ -111,6 +134,7 @@ export class Runtime extends EventEmitter {
       ? { ...patch, tunnel: { ...patch.tunnel, apiKey: current.tunnel.apiKey } }
       : patch
     this.logs.info({ category: 'config', action: 'config.update', message: 'Updating application configuration', data: { sections: Object.keys(patch) } })
+    if (patch.limits) this.shell.setConcurrencyLimit(patch.limits.maxConcurrentTasks)
     const updated = this.store.update(normalized)
     this.emit('change', this.snapshot())
     return updated
@@ -125,8 +149,31 @@ export class Runtime extends EventEmitter {
     return values
   }
 
+  async diagnostics(projectId?: string): Promise<Record<string, unknown>> {
+    const config = this.store.get()
+    const snapshot = this.snapshot()
+    const host = await this.host.capabilities(projectId)
+    return {
+      generatedAt: new Date().toISOString(),
+      app: { name: 'web-codex', version: packageJson.version, platform: process.platform, arch: process.arch, electron: process.versions.electron, node: process.version },
+      gateway: snapshot.gateway,
+      tunnel: snapshot.tunnel,
+      proxy: { ...snapshot.proxy, proxy: sanitizeEndpoint(snapshot.proxy.proxy) },
+      secrets: snapshot.secrets,
+      privileged: snapshot.privileged,
+      projects: config.projects.map((project) => ({ id: project.id, name: project.name, path: project.path, enabled: project.enabled, remoteShell: project.remoteShell })),
+      mcpServers: config.mcpServers.map((server) => server.transport === 'stdio'
+        ? { id: server.id, name: server.name, alias: server.alias, enabled: server.enabled, transport: server.transport, command: server.command, args: server.args, envKeys: Object.keys(server.env) }
+        : { id: server.id, name: server.name, alias: server.alias, enabled: server.enabled, transport: server.transport, url: sanitizeEndpoint(server.url), headerKeys: Object.keys(server.headers) }),
+      tasks: snapshot.tasks.map(({ stdout, stderr, ...task }) => ({ ...task, stdoutBytes: Buffer.byteLength(stdout), stderrBytes: Buffer.byteLength(stderr) })),
+      host: { ...host, proxy: { ...host.proxy, proxy: sanitizeEndpoint(host.proxy.proxy) } },
+      recentLogs: this.logs.list({ limit: 300 })
+    }
+  }
+
   snapshot(): RuntimeSnapshot {
     return {
+      appVersion: packageJson.version,
       gateway: this.gateway.getState(),
       tunnel: this.tunnel.getState(),
       proxy: this.proxy.getState(),

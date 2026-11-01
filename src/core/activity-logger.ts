@@ -50,6 +50,24 @@ function binaryContentSummary(content: string): Record<string, unknown> {
   }
 }
 
+function redactOpenAIMetadata(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  let changed = false
+  if (Array.isArray(value)) {
+    for (const item of value) changed = redactOpenAIMetadata(item) || changed
+    return changed
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (key.startsWith('openai/') || /^timezone(?:_offset_minutes)?$/i.test(key)) {
+      (value as Record<string, unknown>)[key] = '[REDACTED]'
+      changed = true
+    } else {
+      changed = redactOpenAIMetadata(child) || changed
+    }
+  }
+  return changed
+}
+
 function auditFileOrder(filename: string): { day: string; sequence: number } {
   const match = filename.match(/^audit-(\d{4}-\d{2}-\d{2})(?:-(\d{4}))?\.jsonl$/)
   return { day: match?.[1] ?? '', sequence: Number(match?.[2] ?? 0) }
@@ -76,6 +94,7 @@ export class ActivityLogger extends EventEmitter {
   async initialize(): Promise<void> {
     await mkdir(this.directory, { recursive: true })
     await this.removeExpiredFiles()
+    await this.scrubLegacyMetadata()
     await this.loadRecent()
   }
 
@@ -169,10 +188,11 @@ export class ActivityLogger extends EventEmitter {
     return text
       .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1[REDACTED]')
       .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, '[REDACTED]')
+      .replace(/\btunnel_[a-z0-9]{16,}\b/gi, '[REDACTED]')
       .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, '[REDACTED]')
       .replace(/([?&](?:code|state|session|key)=)[^&\s]+/gi, '$1[REDACTED]')
-      .replace(/((?:^|\s)--?(?:access[-_]?token|auth[-_]?token|api[-_]?key|token|password|secret|authorization|private-?key|passphrase)\s+)("[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1[REDACTED]')
-      .replace(/((?:"|')?(?:access[-_]?token|auth[-_]?token|api[-_]?key|token|password|secret|authorization|private_?key|passphrase)(?:"|')?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1[REDACTED]')
+      .replace(/((?:^|\s)--?(?:access[-_]?token|auth[-_]?token|api[-_]?key|token|password|secret|authorization|private-?key|passphrase|tunnel[-_]?id)\s+)("[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1[REDACTED]')
+      .replace(/((?:"|')?(?:access[-_]?token|auth[-_]?token|api[-_]?key|token|password|secret|authorization|private_?key|passphrase|tunnel[-_]?id)(?:"|')?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1[REDACTED]')
       .replace(/(https?:\/\/)[^/\s:@]+:[^/\s@]+@/gi, '$1[REDACTED]@')
   }
 
@@ -196,7 +216,7 @@ export class ActivityLogger extends EventEmitter {
       if (Array.isArray(value)) return value.slice(0, 200).map((item) => this.sanitize(item, '', depth + 1, seen))
       const output: Record<string, unknown> = {}
       for (const [childKey, childValue] of Object.entries(value).slice(0, 100)) {
-        if (/(?:token|secret|password|authorization|cookie|credential|api_?key|private_?key|passphrase|session_?id)/i.test(childKey) || /^(?:headers|env)$/i.test(childKey)) {
+        if (childKey.startsWith('openai/') || /^timezone(?:_offset_minutes)?$/i.test(childKey) || /(?:token|secret|password|authorization|cookie|credential|api_?key|private_?key|passphrase|session_?id|tunnel_?id)/i.test(childKey) || /^(?:headers|env)$/i.test(childKey)) {
           output[childKey] = '[REDACTED]'
         } else {
           output[childKey] = this.sanitize(childValue, childKey, depth + 1, seen)
@@ -245,6 +265,54 @@ export class ActivityLogger extends EventEmitter {
       const info = await stat(filePath)
       if (info.mtimeMs < cutoff) await rm(filePath, { force: true })
     }
+  }
+
+  private async scrubLegacyMetadata(): Promise<void> {
+    for (const file of await this.logFiles()) {
+      const filePath = join(this.directory, file)
+      const content = await readFile(filePath, 'utf8')
+      let changed = false
+      const lines = content.split('\n').map((line) => {
+        if (!line.trim()) return line
+        try {
+          const event = JSON.parse(line) as AuditLogEvent
+          if (!redactOpenAIMetadata(event) && !this.redactEventTunnelIds(event)) return line
+          changed = true
+          return JSON.stringify(event)
+        } catch {
+          return line
+        }
+      })
+      if (changed) await writeFile(filePath, lines.join('\n'), { encoding: 'utf8', mode: 0o600 })
+    }
+  }
+
+  private redactEventTunnelIds(event: AuditLogEvent): boolean {
+    let changed = false
+    if (typeof event.message === 'string') {
+      const redacted = this.redactText(event.message)
+      if (redacted !== event.message) {
+        event.message = redacted
+        changed = true
+      }
+    }
+    if (event.data !== undefined) {
+      const before = JSON.stringify(event.data)
+      event.data = this.redactTunnelIds(event.data)
+      if (JSON.stringify(event.data) !== before) changed = true
+    }
+    return changed
+  }
+
+  private redactTunnelIds(value: unknown): unknown {
+    if (typeof value === 'string') return this.redactText(value)
+    if (Array.isArray(value)) return value.map((item) => this.redactTunnelIds(item))
+    if (value !== null && typeof value === 'object') {
+      const output: Record<string, unknown> = {}
+      for (const [key, child] of Object.entries(value)) output[key] = this.redactTunnelIds(child)
+      return output
+    }
+    return value
   }
 
   private async loadRecent(): Promise<void> {

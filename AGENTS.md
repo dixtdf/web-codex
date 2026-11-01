@@ -13,7 +13,7 @@ Web Codex is an independent, cross-platform desktop MCP application. It gives We
 - The local MCP listener must remain loopback-only and Bearer-token authenticated.
 - Do not log access tokens, authorization headers, MCP secrets, or sensitive environment variables.
 - The user allows full-access and administrator operation. Never bypass operating-system authentication or silently weaken platform security.
-- Do not commit or push Git unless the user explicitly requests it in the current conversation.
+- After every development task, complete the required validation, commit all completed changes with a clear Git message, and build a local Windows package with `npm run dist:win` (publishing is disabled by configuration). This is standing user authorization for commits; do not push unless separately requested in the current conversation.
 - Keep user-facing documentation in English and Simplified Chinese.
 
 ## Read before changing behavior

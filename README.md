@@ -7,14 +7,16 @@ Web Codex is an independent, cross-platform Electron workspace that lets Web Cha
 ## Features
 
 - Register local folders and maintain `AGENTS.md` or `agent.md` instructions.
-- Read, write, patch, search, move, and delete files inside canonical project roots.
+- Read, write, patch, search, move, and delete files inside canonical project roots, with UTF-8/output cursors, SHA-256 conflict checks, deletion dry runs, and recoverable trash.
 - Transfer STEP, STL, KiCad, and other binary files with chunked Base64/SHA-256, ZIP create/extract, and a drag-and-drop attachment inbox.
-- Run cmd, PowerShell, bash, or zsh commands with live activity, output limits, timeouts, and process-tree termination.
+- Run cmd, PowerShell, bash, or zsh commands and structured executables with live output, pipe stdin, idempotency keys, timeouts, persisted tasks, pagination, concurrency limits, and process-tree termination.
+- Inspect Git status, diffs, history, branches, staged paths, project-contained worktrees, explicit conflict resolution, and create local commits.
+- Inspect host capabilities and export a redacted JSON connection-diagnostics report.
 - Apply optional per-project remote command policies (`allow`, prefix `allowlist`, or `deny`) without restricting local full-access tasks.
 - Audit local and remote activity with rotating JSONL logs, request/task correlation, filtering, export, and credential/content redaction.
 - Encrypt Gateway, Tunnel, and downstream MCP secrets with Electron async `safeStorage`; never fall back to plaintext persistence.
 - Expose a loopback-only, Bearer-authenticated Streamable HTTP MCP endpoint.
-- Aggregate stdio and Streamable HTTP MCP servers as `alias__tool` tools.
+- Aggregate stdio and Streamable HTTP MCP servers as `alias__tool` tools and forward tools, resources, and prompts.
 - Detect environment or system proxy settings with explicit manual/direct modes and loopback bypass.
 - Configure OpenAI Secure Tunnel with only a Tunnel ID and write-only API Key; the checksum-verified official `openai/tunnel-client` is bundled and all startup details stay internal.
 - Manage the local runtime through Home, Projects, Tunnel, MCP Connections, Activity, and Settings pages with a hidden Windows/Linux native menu bar.
@@ -78,6 +80,7 @@ The local MCP endpoint defaults to `http://127.0.0.1:32180/mcp` and is never int
 - [Testing](docs/TESTING.md)
 - [JSONL audit logging](docs/LOGGING.md)
 - [Validation record](docs/VALIDATION.md)
+- [Capability gap audit](docs/GAPS.md)
 - [MCP tools](docs/MCP_TOOLS.md)
 - [Tunnel validation boundary](docs/TUNNEL.md)
 

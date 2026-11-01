@@ -92,9 +92,17 @@ describe('McpHub transports', () => {
     expect(JSON.stringify(auditCall.data)).not.toContain('hello')
     await expect(hub.callTool('local__missing', {})).rejects.toMatchObject({ code: 'MCP_TOOL_NOT_FOUND' })
 
+    expect(await hub.listResources()).toEqual([expect.objectContaining({ uri: 'fixture://readme', name: 'fixture-resource', mimeType: 'text/plain', serverId: config.id })])
+    await expect(hub.readResource(config.id, 'fixture://readme')).resolves.toMatchObject({ contents: [expect.objectContaining({ text: 'fixture-resource-body' })] })
+    await expect(hub.readResource(config.id, '')).rejects.toMatchObject({ code: 'MCP_RESOURCE_URI_INVALID' })
+    expect(await hub.listPrompts()).toEqual([expect.objectContaining({ name: 'greet', serverId: config.id, arguments: [expect.objectContaining({ name: 'name' })] })])
+    await expect(hub.getPrompt(config.id, 'greet', { name: 'Codex' })).resolves.toMatchObject({ messages: [expect.objectContaining({ content: expect.objectContaining({ text: 'Hello Codex' }) })] })
+    await expect(hub.getPrompt('missing', 'greet')).rejects.toMatchObject({ code: 'MCP_SERVER_NOT_FOUND' })
+
     await hub.disconnect(config.id)
     expect(hub.states()).toEqual([expect.objectContaining({ connected: false })])
     await expect(hub.callTool('local__echo', {})).rejects.toMatchObject({ code: 'MCP_TOOL_NOT_FOUND' })
+    expect(await hub.listResources()).toEqual([])
   })
 
   it('discovers and calls Streamable HTTP tools through the proxy-aware fetch path', async () => {
@@ -113,6 +121,10 @@ describe('McpHub transports', () => {
     await expect(hub.callTool('remote__echo', { text: 'hello' })).resolves.toMatchObject({
       structuredContent: { transport: 'http', text: 'hello', clientHeader: 'web-codex' }
     })
+    expect(await hub.listResources(config.id)).toEqual([expect.objectContaining({ uri: 'http://fixture.test/readme', name: 'http-resource' })])
+    await expect(hub.readResource(config.id, 'http://fixture.test/readme')).resolves.toMatchObject({ contents: [expect.objectContaining({ text: 'http-resource-body' })] })
+    expect(await hub.listPrompts(config.id)).toEqual([expect.objectContaining({ name: 'http-greet' })])
+    await expect(hub.getPrompt(config.id, 'http-greet', { name: 'Web' })).resolves.toMatchObject({ messages: [expect.objectContaining({ content: expect.objectContaining({ text: 'HTTP Hello Web' }) })] })
   })
 
   it('records transport failures and allows aliases to be replaced safely', async () => {
@@ -161,6 +173,14 @@ async function startHttpFixture(): Promise<string> {
         content: [{ type: 'text', text: `http:${text}` }],
         structuredContent: { transport: 'http', text, clientHeader: request.headers['x-test-client'] ?? null }
       }))
+      server.registerResource('http-resource', 'http://fixture.test/readme', {
+        description: 'HTTP fixture resource',
+        mimeType: 'text/plain'
+      }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/plain', text: 'http-resource-body' }] }))
+      server.registerPrompt('http-greet', {
+        description: 'HTTP fixture prompt',
+        argsSchema: { name: z.string() }
+      }, async ({ name }) => ({ messages: [{ role: 'user', content: { type: 'text', text: `HTTP Hello ${name}` } }] }))
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
       await server.connect(transport)
       await transport.handleRequest(request, response, request.body)

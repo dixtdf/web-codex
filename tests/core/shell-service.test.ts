@@ -23,8 +23,8 @@ beforeEach(async () => {
 afterEach(async () => {
   await shells.stopAll()
   vi.unstubAllEnvs()
-  await rm(temporaryDirectory, { recursive: true, force: true })
-})
+  await rm(temporaryDirectory, { recursive: true, force: true, maxRetries: 20, retryDelay: 200 })
+}, 30_000)
 
 describe('ShellService execution', () => {
   it('runs the platform default shell and captures stdout, stderr, and exit metadata', async () => {
@@ -119,7 +119,7 @@ describe('ShellService task control', () => {
     }, )
 
     expect(task.status).toBe('stopped')
-    expect(task.stderr).toContain('Command timed out after 30ms')
+    expect(task.stderr).toContain('Task timed out after 30ms')
     expect(task.endedAt).not.toBeNull()
   })
 

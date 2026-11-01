@@ -1,24 +1,24 @@
 # Roadmap
 
-## 0.1.0
+## Completed
 
-- Deliver the independent desktop runtime and five core views.
-- Provide project, file, shell, task, downstream MCP, and proxy capabilities.
-- Verify local MCP behavior through automated protocol tests.
-- Provide optional per-project remote shell command policies with full-access default.
-- Build Windows, macOS, and Linux packages in GitHub Actions.
-- Record the exact OpenAI Tunnel live-validation boundary.
-- Protect Gateway, Tunnel, and downstream MCP secrets with OS-backed encrypted storage.
+- Independent Electron desktop runtime with six core views and system tray.
+- Project, file, binary/archive, attachment, shell, structured process, task, host diagnostics, downstream MCP Resources/Prompts, proxy, and local Git workflow capabilities including worktrees and conflict resolution.
+- Per-project remote shell policies with full-access default.
+- OS-backed encrypted secret storage and rotating JSONL audit logs.
+- Official OpenAI Tunnel client, no-auth profile, health readiness, and redacted diagnostic export.
+- Windows, macOS, and Linux release workflows.
+- Local and official-control-plane protocol tests.
+- User-observed interactive ChatGPT Desktop connection and remote text-file write.
 
-## Next candidates
+## Remaining
 
-- Validate the supported OpenAI Tunnel CLI and ChatGPT Connector with an authorized account.
-
-- Add signed and notarized release artifacts when platform certificates are available.
-- Add downstream MCP Resources and Prompts forwarding.
-- Add persistent interactive terminal sessions for REPL and interactive development tools.
-
+- Add browser-automated interactive ChatGPT acceptance to CI; persisted evidence already records successful `project_list` and remote `file_write`.
+- Add signed and notarized release artifacts when Windows, macOS, and Linux certificates are available. Current packages are unsigned.
+- Add full PTY-backed interactive terminal sessions for TUIs and REPLs. Pipe stdin, output pagination, idempotency, persistence, and concurrency limits are implemented, but a full terminal emulator is not.
 - Add a privileged helper for macOS and Linux instead of elevating the desktop UI process.
-- Add automatic updates and connection diagnostics with exportable redacted reports.
+- Add automatic updates. Redacted diagnostic export is implemented; automatic delivery/installation is not.
+- Add direct chat-attachment ingestion when the host exposes an attachment API; the native attachment inbox is the current bridge.
+- Add OS-level sandbox/quota enforcement, GUI automation, multi-host/SSH/WSL/Docker, multi-step orchestration, event notifications, and per-operation approval UI. These remain unimplemented in `docs/GAPS.md`.
 
-Roadmap entries are candidates, not claims of completed support.
+Roadmap entries distinguish implemented behavior from blocked or future work. They are not claims that blocked items are complete.

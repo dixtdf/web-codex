@@ -56,6 +56,28 @@ describe('Runtime orchestration', () => {
     expect(runtime.snapshot().tasks).toEqual([])
   })
 
+  it('applies and validates the configured concurrency limit', async () => {
+    expect(runtime.shell.concurrencyLimit).toBe(20)
+    runtime.updateConfig({ limits: { maxConcurrentTasks: 5 } })
+    expect(runtime.shell.concurrencyLimit).toBe(5)
+    expect(runtime.store.get().limits.maxConcurrentTasks).toBe(5)
+    expect(() => runtime.updateConfig({ limits: { maxConcurrentTasks: 0 } })).toThrowError(expect.objectContaining({ code: 'SHELL_CONCURRENCY_LIMIT_INVALID' }))
+    expect(runtime.shell.concurrencyLimit).toBe(5)
+    expect(runtime.store.get().limits.maxConcurrentTasks).toBe(5)
+  })
+
+  it('applies a persisted concurrency limit during initialization', async () => {
+    await runtime.stop()
+    const configPath = join(temporaryDirectory, 'config.json')
+    const seed = new ConfigStore(configPath)
+    await seed.load()
+    seed.update({ limits: { maxConcurrentTasks: 7 } })
+    await seed.flush()
+    runtime = new Runtime(configPath)
+    await runtime.initialize()
+    expect(runtime.shell.concurrencyLimit).toBe(7)
+  })
+
   it('emergency-stops the gateway and all active shell tasks', async () => {
     const project = await runtime.projects.create({ path: join(temporaryDirectory, 'workspace') })
     await runtime.gateway.start()
@@ -97,5 +119,32 @@ describe('Runtime orchestration', () => {
     await expect(runtime.start()).rejects.toMatchObject({ code: 'TUNNEL_CREDENTIALS_REQUIRED' })
     expect(runtime.gateway.getState().running).toBe(true)
     expect(runtime.tunnel.getState()).toMatchObject({ running: false, detail: 'Tunnel credentials required' })
+  })
+
+  it('exports redacted diagnostics without credentials, environment values, or task output bodies', async () => {
+    const project = await runtime.projects.create({ path: join(temporaryDirectory, 'diagnostics-workspace') })
+    const config = runtime.store.get()
+    const gatewayToken = config.gateway.authToken
+    runtime.store.update({
+      ...config,
+      mcpServers: [{ id: 'diag', name: 'Diagnostic', alias: 'diag', enabled: false, transport: 'stdio', command: 'node', args: [], env: { API_TOKEN: 'diagnostic-secret-value' } }]
+    })
+    await runtime.shell.runProcess({ projectId: project.id, executable: process.execPath, args: ['-e', 'process.stdout.write(process.env.PRIVATE_OUTPUT ?? "")'], env: { PRIVATE_OUTPUT: 'private-output' } })
+
+    const report = await runtime.diagnostics(project.id)
+    const serialized = JSON.stringify(report)
+    expect(report).toMatchObject({
+      app: { name: 'web-codex', version: expect.any(String) },
+      gateway: { running: false },
+      tunnel: { running: false },
+      projects: [expect.objectContaining({ id: project.id })],
+      mcpServers: [expect.objectContaining({ envKeys: ['API_TOKEN'] })],
+      tasks: [expect.objectContaining({ stdoutBytes: 14, stderrBytes: 0 })],
+      recentLogs: expect.any(Array)
+    })
+    expect(serialized).not.toContain(gatewayToken)
+    expect(serialized).not.toContain('diagnostic-secret-value')
+    expect(serialized).not.toContain('private-output')
+    expect(serialized).not.toMatch(/"stdout":|"stderr":/)
   })
 })

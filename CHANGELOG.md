@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.5.0 - 2026-11-01 (local/unreleased; unsigned)
+
+### Changed
+
+- File search returns deterministic cursor-paginated `{ matches, nextCursor }` results and honors root `.gitignore` rules by default.
+- Project listing reports live path health separately from the enabled registration state.
+- Shell and structured-process tool descriptions explicitly disclose full desktop-user authority rather than implying project sandboxing.
+
+### Fixed
+
+- File deletion supports non-mutating dry runs and expected-SHA-256 checks; stale versions cannot be deleted.
+- Workspace MCP tools reject unknown top-level arguments through strict schemas instead of silently ignoring misspelled safety options.
+- Task output pagination advances across UTF-8 boundaries without splitting characters and reports requested/actual offsets.
+
+## 0.3.0 - 2026-11-01 (local/unreleased; not committed, pushed, or published; unsigned)
+
+### Added
+
+- Git status/diff/log/branches, project-contained worktree list/add/remove, conflict discovery and explicit ours/theirs resolution, staging, and local commits.
+- Structured process execution, interactive pipe stdin, task persistence, idempotency, output pagination, a user-configurable concurrent-process cap (1-200, default 20), host capabilities, connection health, and redacted diagnostic export.
+- Hash/version-aware atomic text writes and patches, dry-run patches, file attributes, copy conflict strategies, deletion impact previews, recoverable trash, and explicit backups.
+- Chunked binary download resources, transfer verification status, file hashes, safe archives, and attachment copy conflict handling.
+- Project lifecycle and AGENTS/agent instructions tools through MCP.
+- Downstream MCP Resources and Prompts forwarding.
+
+### Fixed
+
+- Windows cmd commands now preserve quoted scripts through verbatim argument passing.
+- Task state `flush()` now writes the final scheduled state, preventing completed tasks from being misreported as interrupted after restart.
+- Empty Git repositories now report the actual branch name.
+- Explicit Git commit paths are staged before commit, including new files.
+- Hash-verified binary writes now use temporary-file validation and atomic replacement, preserving the original file on mismatch.
+- Downstream resource and prompt responses are limited to 4 MB.
+- ChatGPT identity, session, organization, location, and timezone metadata are redacted and existing retained JSONL files are scrubbed during initialization.
+
+- Tunnel IDs are redacted from new audit events and from retained JSONL files during initialization.
+- Desktop QA regressions: UTF-8 pagination aligns to code points, file moves reject overwrite by default unless hash-confirmed, Windows CMD/PowerShell output is UTF-8, process stop waits for close, and tool failures expose structured error codes.
+
 ## 0.2.1 - 2026-11-01
 
 ### Fixed

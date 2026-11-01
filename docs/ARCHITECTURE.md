@@ -22,8 +22,9 @@ Runtime, configuration, shell, MCP connection, proxy, and Tunnel changes are emi
 2. The Tunnel forwards to the loopback Gateway.
 3. Express validates the Bearer token before parsing MCP requests.
 4. Each stateless request receives an SDK `McpServer` and `StreamableHTTPServerTransport`.
-5. Workspace tools call domain services directly; `shell_run` evaluates the selected project's remote command policy before starting a process. `mcp_tool_call` resolves a namespaced downstream tool through `McpHub`.
-6. Tool responses include text JSON and `structuredContent` so structured MCP results remain available.
+5. Workspace tools call domain services directly; `shell_run` and `process_run` evaluate the selected project's remote command policy before starting a process. Git, host, diagnostics, file recovery, and attachment services are composed into the same Gateway.
+6. `mcp_tool_call`, `mcp_resource_read`, and `mcp_prompt_get` resolve downstream tools, resources, or prompts through `McpHub`, which isolates them by server ID and bounds resource responses.
+7. Tool responses include text JSON and `structuredContent` so structured MCP results remain available; file downloads may also include an inline MCP resource block.
 
 ## Persistence and process ownership
 

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, realpath, stat } from 'node:fs/promises'
 import { basename, resolve } from 'node:path'
 import type { Project, ProjectContext, RemoteShellPolicy } from '../shared/types'
-import { AppError, assertCondition } from './errors'
+import { AppError, assertCondition, errorMessage } from './errors'
 import { ConfigStore } from './config-store'
 import { normalizeRemoteShellPolicy } from './remote-shell-policy'
 
@@ -21,6 +21,19 @@ export class ProjectService {
     return this.store.get().projects
       .map((project) => ({ ...project, remoteShell: normalizeRemoteShellPolicy(project.remoteShell) }))
       .sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  async listWithHealth(): Promise<Array<Project & { health: { accessible: boolean; status: 'ready' | 'unavailable'; error: string | null } }>> {
+    return Promise.all(this.list().map(async (project) => {
+      try {
+        const canonicalPath = await realpath(project.path)
+        const info = await stat(canonicalPath)
+        assertCondition(info.isDirectory(), 'Project path is no longer a directory', 'PROJECT_NOT_DIRECTORY')
+        return { ...project, health: { accessible: true, status: 'ready' as const, error: null } }
+      } catch (error) {
+        return { ...project, health: { accessible: false, status: 'unavailable' as const, error: errorMessage(error) } }
+      }
+    }))
   }
 
   get(id: string): Project {

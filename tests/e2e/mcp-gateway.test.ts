@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import packageJson from '../../package.json'
 import { ConfigStore } from '../../src/core/config-store'
 import { FileService } from '../../src/core/file-service'
+import { GitService } from '../../src/core/git-service'
+import { HostService } from '../../src/core/host-service'
 import { McpGateway } from '../../src/core/mcp-gateway'
 import { McpHub } from '../../src/core/mcp-hub'
 import { ProjectService } from '../../src/core/project-service'
@@ -22,8 +24,8 @@ interface RpcResponse {
     resultType?: string
     supportedVersions?: string[]
     capabilities?: Record<string, unknown>
-    tools?: Array<{ name: string }>
-    structuredContent?: { result: unknown }
+    tools?: Array<{ name: string; inputSchema?: { additionalProperties?: boolean; properties?: Record<string, unknown> } }>
+    structuredContent?: { result?: unknown; error?: { code: string; message: string; details?: unknown } }
     isError?: boolean
     content?: Array<{ type: string; text: string }>
   }
@@ -47,11 +49,13 @@ beforeEach(async () => {
   store.update({ gateway: { ...config.gateway, port: 0, authToken: 'integration-test-token' } })
   projects = new ProjectService(store)
   project = await projects.create({ path: join(temporaryDirectory, 'workspace') })
-  const files = new FileService(projects)
+  const files = new FileService(projects, { trashDirectory: join(temporaryDirectory, 'trash') })
   shell = new ShellService(projects)
   const proxy = new ProxyManager(store)
   const hub = new McpHub(store, proxy)
-  gateway = new McpGateway({ store, projects, files, shell, hub })
+  const git = new GitService(projects)
+  const host = new HostService(projects, proxy, () => false)
+  gateway = new McpGateway({ store, projects, files, shell, hub, git, host })
   const state = await gateway.start()
   mcpUrl = state.address ?? ''
   origin = mcpUrl.slice(0, -'/mcp'.length)
@@ -60,7 +64,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await gateway.stop()
   await store.flush()
-  await rm(temporaryDirectory, { recursive: true, force: true })
+  await rm(temporaryDirectory, { recursive: true, force: true, maxRetries: 20, retryDelay: 200 })
 })
 
 describe('MCP Gateway HTTP transport', () => {
@@ -104,10 +108,36 @@ describe('MCP Gateway HTTP transport', () => {
     const names = listed.result?.tools?.map((tool) => tool.name) ?? []
     expect(names).toEqual(expect.arrayContaining([
       'project_list', 'project_context_get', 'file_list', 'file_read', 'file_write', 'file_patch', 'file_search',
-      'file_mkdir', 'file_move', 'file_delete', 'file_read_binary', 'file_write_binary', 'file_archive_create', 'file_archive_extract', 'shell_run', 'shell_task_list', 'shell_task_get', 'shell_task_stop',
-      'mcp_server_list', 'mcp_tool_list', 'mcp_tool_call'
+      'file_mkdir', 'file_move', 'file_delete', 'file_hash', 'file_attributes', 'file_copy', 'file_delete_plan', 'file_backup', 'trash_list', 'trash_restore',
+      'file_read_binary', 'file_download', 'file_transfer_status', 'file_write_binary', 'file_archive_create', 'file_archive_extract',
+      'upload_list', 'upload_copy', 'upload_extract', 'shell_run', 'process_run', 'shell_task_list', 'shell_task_get', 'shell_task_output',
+      'shell_task_input', 'shell_task_close_input', 'shell_task_stop', 'git_status', 'git_diff', 'git_log', 'git_branch_list', 'git_worktree_list', 'git_stage',
+      'git_worktree_add', 'git_worktree_remove', 'git_conflict_list', 'git_resolve_conflicts', 'git_commit', 'host_capabilities', 'connection_health', 'project_create', 'project_update', 'project_remove', 'project_instructions_update',
+      'mcp_server_list', 'mcp_tool_list', 'mcp_tool_call', 'mcp_resource_list', 'mcp_resource_read', 'mcp_prompt_list', 'mcp_prompt_get'
     ]))
     expect(new Set(names).size).toBe(names.length)
+    const deleteTool = listed.result?.tools?.find((tool) => tool.name === 'file_delete')
+    expect(deleteTool?.inputSchema?.additionalProperties).toBe(false)
+    expect(deleteTool?.inputSchema?.properties).toMatchObject({ dryRun: expect.any(Object), expectedSha256: expect.any(Object) })
+    const searchTool = listed.result?.tools?.find((tool) => tool.name === 'file_search')
+    expect(searchTool?.inputSchema?.properties).toHaveProperty('cursor')
+  })
+
+  it('reports host and connection health and exposes empty downstream resource collections', async () => {
+    await expect(callTool(3, 'connection_health')).resolves.toMatchObject({
+      healthy: true,
+      versions: { webCodex: packageJson.version },
+      gateway: { authentication: 'bearer' },
+      services: { files: true, shell: true },
+      sandboxed: false
+    })
+    await expect(callTool(4, 'host_capabilities')).resolves.toMatchObject({
+      host: { platform: process.platform },
+      resources: { cpuCount: expect.any(Number) },
+      executionBoundary: { sandboxed: false }
+    })
+    await expect(callTool(5, 'mcp_resource_list')).resolves.toEqual([])
+    await expect(callTool(6, 'mcp_prompt_list')).resolves.toEqual([])
   })
 
   it('executes project and file tools against the registered workspace', async () => {
@@ -120,6 +150,16 @@ describe('MCP Gateway HTTP transport', () => {
 
     const context = await callTool(13, 'project_context_get')
     expect(context).toMatchObject({ project: { id: project.id }, instructions: '', instructionFile: null })
+  })
+
+  it('reports stale project registrations without treating enabled as accessible', async () => {
+    const stale = await projects.create({ path: join(temporaryDirectory, 'missing-workspace') })
+    await rm(stale.path, { recursive: true, force: true })
+    const listed = await callTool(103, 'project_list') as Array<{ id: string; enabled: boolean; health: { accessible: boolean; status: string; error: string | null } }>
+    expect(listed).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: project.id, health: { accessible: true, status: 'ready', error: null } }),
+      expect.objectContaining({ id: stale.id, enabled: true, health: { accessible: false, status: 'unavailable', error: expect.any(String) } })
+    ]))
   })
 
   it('transfers binary files and archives through MCP', async () => {
@@ -136,14 +176,65 @@ describe('MCP Gateway HTTP transport', () => {
     expect(await readFile(join(project.path, 'imported', 'bracket.stl'))).toEqual(Buffer.concat([first, second]))
   })
 
+  it('runs file recovery, transfer diagnostics, and Git tools through MCP', async () => {
+    await callTool(70, 'process_run', { executable: 'git', args: ['init', '-b', 'main'] })
+    await callTool(71, 'process_run', { executable: 'git', args: ['config', 'user.name', 'MCP Test'] })
+    await callTool(72, 'process_run', { executable: 'git', args: ['config', 'user.email', 'mcp@example.test'] })
+    await callTool(73, 'file_write', { path: 'README.md', content: 'hello\n' })
+
+    const hash = await callTool(74, 'file_hash', { path: 'README.md' }) as { sha256: string; size: number }
+    expect(hash).toMatchObject({ size: 6, sha256: expect.stringMatching(/^[a-f0-9]{64}$/) })
+    await expect(callTool(90, 'file_attributes', { path: 'README.md' })).resolves.toMatchObject({ type: 'file', size: 6, readable: true })
+    await expect(callTool(75, 'file_copy', { sourcePath: 'README.md', destinationPath: 'README-copy.md' })).resolves.toMatchObject({ path: 'README-copy.md', bytes: 6, sha256: hash.sha256 })
+    await expect(callTool(76, 'file_delete_plan', { path: 'README-copy.md' })).resolves.toMatchObject({ type: 'file', files: 1, bytes: 6 })
+    await expect(callTool(77, 'file_transfer_status', { path: 'README.md' })).resolves.toMatchObject({ sha256: hash.sha256, suggestedChunkCount: 1 })
+    await expect(callTool(78, 'file_download', { path: 'README.md', maxBytes: 6 })).resolves.toMatchObject({ nextOffset: 6, truncated: false })
+
+    const backup = await callTool(79, 'file_backup', { path: 'README.md' }) as { id: string }
+    await expect(callTool(80, 'file_delete', { path: 'README.md' })).resolves.toMatchObject({ recoverable: true })
+    expect(await callTool(81, 'trash_list') as unknown[]).toEqual(expect.arrayContaining([expect.objectContaining({ id: backup.id, reason: 'backup' })]))
+    await expect(callTool(82, 'trash_restore', { trashId: backup.id })).resolves.toMatchObject({ path: 'README.md' })
+
+    await expect(callTool(83, 'git_status')).resolves.toMatchObject({ branch: 'main', clean: false })
+    await expect(callTool(84, 'git_stage', { paths: ['README.md'] })).resolves.toEqual({ staged: ['README.md'] })
+    await expect(callTool(85, 'git_diff', { staged: true })).resolves.toMatchObject({ diff: expect.stringContaining('+hello') })
+    await expect(callTool(86, 'git_commit', { message: 'Add README', paths: ['README.md'] })).resolves.toMatchObject({ subject: 'Add README' })
+    await expect(callTool(87, 'git_log', { limit: 1 })).resolves.toEqual([expect.objectContaining({ author: 'MCP Test', subject: 'Add README' })])
+    expect(await callTool(88, 'git_branch_list')).toEqual([expect.objectContaining({ name: 'main', current: true })])
+    await expect(callTool(89, 'git_worktree_list')).resolves.toEqual([expect.objectContaining({ branch: 'main', bare: false })])
+    await expect(callTool(91, 'git_worktree_add', { path: '.worktrees/e2e', branch: 'e2e-worktree' })).resolves.toMatchObject({ path: '.worktrees/e2e', branch: 'e2e-worktree' })
+    expect(await callTool(92, 'git_worktree_list') as unknown[]).toEqual(expect.arrayContaining([expect.objectContaining({ branch: 'e2e-worktree' })]))
+    await expect(callTool(93, 'git_worktree_remove', { path: '.worktrees/e2e' })).resolves.toEqual({ removed: '.worktrees/e2e' })
+  })
+
   it('runs shell tools and exposes task retrieval through MCP', async () => {
     const completed = await callTool(20, 'shell_run', { command: 'node -p 42', timeoutMs: 10_000 })
     expect(completed).toMatchObject({ status: 'completed', exitCode: 0, stdout: '42\n' })
     const taskId = (completed as { id: string }).id
 
     await expect(callTool(21, 'shell_task_get', { taskId })).resolves.toMatchObject({ id: taskId, status: 'completed' })
-    const tasks = await callTool(22, 'shell_task_list')
-    expect(tasks).toEqual([expect.objectContaining({ id: taskId, stdout: '42\n' })])
+    const tasks = await callTool(22, 'shell_task_list') as { tasks: Array<{ id: string; stdoutBytes: number }>; nextCursor: string | null }
+    expect(tasks.tasks).toEqual([expect.objectContaining({ id: taskId, stdoutBytes: 3 })])
+    expect(tasks.nextCursor).toBeNull()
+    await expect(callTool(23, 'shell_task_output', { taskId, stream: 'stdout', offset: 0, maxBytes: 10 })).resolves.toMatchObject({ data: '42\n', eof: true })
+  })
+
+  it('enforces deletion previews, version checks, and strict argument schemas', async () => {
+    const original = await callTool(94, 'file_write', { path: 'protected.txt', content: 'OLD' }) as { sha256: string }
+    const current = await callTool(95, 'file_write', { path: 'protected.txt', content: 'NEW' }) as { sha256: string }
+
+    const stale = await rpc(96, 'tools/call', { name: 'file_delete', arguments: { projectId: project.id, path: 'protected.txt', expectedSha256: original.sha256 } })
+    expect(stale.result?.isError).toBe(true)
+    expect(stale.result?.structuredContent?.error).toMatchObject({ code: 'FILE_VERSION_CONFLICT' })
+    await expect(callTool(97, 'file_read', { path: 'protected.txt' })).resolves.toMatchObject({ content: 'NEW' })
+
+    const unknown = await rpc(98, 'tools/call', { name: 'file_delete', arguments: { projectId: project.id, path: 'protected.txt', dryRun: true, unexpectedOption: true } })
+    expect(unknown.result?.isError).toBe(true)
+    expect(unknown.result?.content?.[0]?.text).toContain('unexpectedOption')
+    await expect(callTool(99, 'file_read', { path: 'protected.txt' })).resolves.toMatchObject({ content: 'NEW' })
+    await expect(callTool(100, 'file_delete', { path: 'protected.txt', expectedSha256: current.sha256, dryRun: true })).resolves.toMatchObject({ dryRun: true, trashId: null })
+    await expect(callTool(101, 'file_read', { path: 'protected.txt' })).resolves.toMatchObject({ content: 'NEW' })
+    await expect(callTool(102, 'file_delete', { path: 'protected.txt', expectedSha256: current.sha256 })).resolves.toMatchObject({ dryRun: false, trashId: expect.any(String) })
   })
 
   it('returns tool-level errors without compromising the HTTP transport', async () => {
@@ -152,6 +243,7 @@ describe('MCP Gateway HTTP transport', () => {
       arguments: { projectId: project.id, path: '../outside.txt' }
     })
     expect(response.result?.isError).toBe(true)
+    expect(response.result?.structuredContent?.error).toMatchObject({ code: 'PATH_OUTSIDE_PROJECT', message: 'Path leaves the project folder' })
     expect(response.result?.content?.[0]?.text).toContain('Path leaves the project folder')
 
     const downstream = await rpc(31, 'tools/call', { name: 'mcp_tool_call', arguments: { name: 'missing__tool' } })
@@ -190,9 +282,10 @@ describe('MCP Gateway HTTP transport', () => {
     await callTool(40, 'file_mkdir', { path: 'folder' })
     await callTool(41, 'file_write', { path: 'folder/a.txt', content: 'Alpha' })
     await expect(callTool(42, 'file_patch', { path: 'folder/a.txt', oldText: 'Alpha', newText: 'Beta' })).resolves.toMatchObject({ replacements: 1 })
-    await expect(callTool(43, 'file_search', { path: 'folder', query: 'Beta' })).resolves.toEqual([
-      { path: 'folder/a.txt', line: 1, column: 1, preview: 'Beta' }
-    ])
+    await expect(callTool(43, 'file_search', { path: 'folder', query: 'Beta' })).resolves.toEqual({
+      matches: [{ path: 'folder/a.txt', line: 1, column: 1, preview: 'Beta' }],
+      nextCursor: null
+    })
     await expect(callTool(44, 'file_list', { path: 'folder' })).resolves.toEqual([
       expect.objectContaining({ name: 'a.txt', type: 'file' })
     ])
@@ -260,8 +353,15 @@ async function rpc(id: number, method: string, params?: Record<string, unknown>)
   return await response.json() as RpcResponse
 }
 
+const toolsWithoutImplicitProject = new Set([
+  'project_list', 'project_create', 'connection_health', 'trash_list', 'trash_restore', 'upload_list',
+  'shell_task_get', 'shell_task_output', 'shell_task_input', 'shell_task_close_input', 'shell_task_stop',
+  'mcp_server_list', 'mcp_tool_list', 'mcp_tool_call', 'mcp_resource_list', 'mcp_resource_read', 'mcp_prompt_list', 'mcp_prompt_get'
+])
+
 async function callTool(id: number, name: string, args: Record<string, unknown> = {}): Promise<unknown> {
-  const response = await rpc(id, 'tools/call', { name, arguments: { projectId: project.id, ...args } })
+  const toolArguments = toolsWithoutImplicitProject.has(name) ? args : { projectId: project.id, ...args }
+  const response = await rpc(id, 'tools/call', { name, arguments: toolArguments })
   expect(response.result?.isError).not.toBe(true)
   return response.result?.structuredContent?.result
 }

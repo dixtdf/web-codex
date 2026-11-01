@@ -37,7 +37,8 @@ describe('ConfigStore', () => {
       network: { mode: 'auto', noProxy: 'localhost,127.0.0.1,::1' },
       gateway: { host: '127.0.0.1', port: 32180, autoStart: true },
       tunnel: { autoStart: false, tunnelId: '', apiKey: '', publicUrl: '' },
-      ui: { theme: 'system', startMinimized: false }
+      ui: { theme: 'system', startMinimized: false },
+      limits: { maxConcurrentTasks: 20 }
     })
     expect(config.gateway.authToken).toMatch(/^[A-Za-z0-9_-]{43}$/)
     expect(createDefaultConfig().gateway.authToken).not.toBe(config.gateway.authToken)
@@ -53,13 +54,14 @@ describe('ConfigStore', () => {
     const saved = createDefaultConfig()
     saved.gateway.port = 41000
     saved.network.manualProxy = 'localhost:8080'
-    await writeFile(filePath, JSON.stringify({ gateway: { port: saved.gateway.port }, network: { manualProxy: saved.network.manualProxy }, projects: null }))
+    await writeFile(filePath, JSON.stringify({ gateway: { port: saved.gateway.port }, network: { manualProxy: saved.network.manualProxy }, projects: null, limits: { maxConcurrentTasks: 7 } }))
 
     const store = new ConfigStore(filePath, protector)
     const loaded = await store.load()
     expect(loaded.gateway).toMatchObject({ port: 41000, host: '127.0.0.1' })
     expect(loaded.network).toMatchObject({ mode: 'auto', manualProxy: 'localhost:8080' })
     expect(loaded.projects).toEqual([])
+    expect(loaded.limits).toEqual({ maxConcurrentTasks: 7 })
 
     loaded.gateway.port = 1
     expect(store.get().gateway.port).toBe(41000)
@@ -153,6 +155,10 @@ describe('ConfigStore', () => {
     expect(persisted.gateway.authToken).toBe('')
     expect(persisted.tunnel.apiKey).toBe('')
     expect(persisted.mcpServers[0].env.TOKEN).toBe('')
+    const restarted = await new ConfigStore(filePath).load()
+    expect(restarted.gateway.authToken).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(restarted.gateway.authToken).not.toBe('memory-gateway-secret')
+    expect(restarted.tunnel.apiKey).toBe('')
   })
 
   it('fails explicitly when protected data cannot be decrypted', async () => {
