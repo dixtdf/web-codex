@@ -97,7 +97,9 @@ export class ConfigStore extends EventEmitter {
 
   update(patch: Partial<AppConfig>): AppConfig {
     this.config = mergeConfig({ ...this.config, ...patch })
-    void this.persist()
+    void this.persist().catch((error: unknown) => {
+      this.emit('persistence-error', error)
+    })
     const snapshot = this.get()
     this.emit('change', snapshot)
     return snapshot

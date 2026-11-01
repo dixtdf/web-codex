@@ -91,6 +91,17 @@ describe('MCP Gateway HTTP transport', () => {
     expect(remove.status).toBe(405)
   })
 
+  it('returns a JSON-RPC parse error for malformed authenticated requests', async () => {
+    const response = await fetch(mcpUrl, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer integration-test-token', 'Content-Type': 'application/json' },
+      body: '{"jsonrpc":"2.0"'
+    })
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({ jsonrpc: '2.0', id: null, error: { code: -32700 } })
+  })
+
   it('initializes the MCP protocol and lists all workspace tools', async () => {
     const discovered = await rpc(0, 'server/discover', { _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28' } })
     expect(discovered.result).toMatchObject({ resultType: 'complete', capabilities: { tools: {} } })

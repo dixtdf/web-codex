@@ -71,6 +71,17 @@ describe('interactive and structured processes', () => {
     await expect(shells.runProcess({ projectId: project.id, executable: process.execPath, args: Array.from({ length: 1001 }, () => 'x') })).rejects.toMatchObject({ code: 'PROCESS_ARGS_LIMIT' })
   })
 
+  it('handles a child closing stdin while initial input is being written', async () => {
+    const task = await shells.runProcess({
+      projectId: project.id,
+      executable: process.execPath,
+      args: ['-e', "process.stdin.destroy();setTimeout(() => process.exit(0), 50)"],
+      stdin: 'x'.repeat(1_000_000)
+    })
+
+    expect(task).toMatchObject({ status: 'completed', exitCode: 0, stdinOpen: false })
+  })
+
   it('deduplicates concurrent launches with the same idempotency key', async () => {
     const options = { projectId: project.id, executable: process.execPath, args: ['-e', 'setTimeout(() => {}, 30000)'], wait: false, idempotencyKey: 'concurrent-process' }
     const [first, second] = await Promise.all([shells.runProcess(options), shells.runProcess(options)])

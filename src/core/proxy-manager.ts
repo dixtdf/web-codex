@@ -77,7 +77,7 @@ export function shouldBypassProxy(rawUrl: string, noProxy: string): boolean {
     return false
   }
   const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase()
-  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return true
+  if (hostname === 'localhost' || hostname.startsWith('127.') || hostname === '::1') return true
   const port = url.port || (url.protocol === 'https:' ? '443' : '80')
   return noProxy.split(',').map((item) => item.trim().toLowerCase()).some((rule) => {
     if (!rule) return false

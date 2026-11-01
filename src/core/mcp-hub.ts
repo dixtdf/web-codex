@@ -91,9 +91,7 @@ export class McpHub extends EventEmitter {
       throw new AppError(`MCP alias is already used: ${alias}`, 'MCP_ALIAS_DUPLICATE')
     }
     const next = { ...input, id, alias } as McpServerConfig
-    if (config.mcpServers.some((item) => item.id === id && item.alias !== alias)) {
-      await this.disconnect(id)
-    }
+    if (this.connections.has(id)) await this.disconnect(id)
     const exists = config.mcpServers.some((item) => item.id === id)
     this.store.update({ mcpServers: exists ? config.mcpServers.map((item) => item.id === id ? next : item) : [...config.mcpServers, next] })
     await this.store.flush()
@@ -206,7 +204,7 @@ export class McpHub extends EventEmitter {
   }
 
   listTools(): NamespacedTool[] {
-    return [...this.connections.values()].flatMap((connection) => [...connection.tools.entries()].map(([name, entry]) => ({
+    return [...this.connections.values()].filter((connection) => connection.state.connected).flatMap((connection) => [...connection.tools.entries()].map(([name, entry]) => ({
       name,
       originalName: entry.originalName,
       serverId: connection.state.id,

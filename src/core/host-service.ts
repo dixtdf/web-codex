@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { statfs } from 'node:fs/promises'
-import { cpus, arch, freemem, homedir, platform, release, totalmem, type as osType } from 'node:os'
+import { cpus, arch, freemem, homedir, platform, release, totalmem, uptime, type as osType } from 'node:os'
 import type { ProjectService } from './project-service'
 import type { ProxyManager } from './proxy-manager'
 
@@ -61,7 +61,7 @@ export class HostService {
       disk = undefined
     }
     return {
-      host: { platform: platform(), type: osType(), release: release(), arch: arch(), hostname: process.env.COMPUTERNAME ?? process.env.HOSTNAME ?? 'localhost', home: homedir(), uptimeSeconds: Math.round(process.uptime()), privileged: this.isPrivileged() },
+      host: { platform: platform(), type: osType(), release: release(), arch: arch(), hostname: process.env.COMPUTERNAME ?? process.env.HOSTNAME ?? 'localhost', home: homedir(), uptimeSeconds: Math.round(uptime()), privileged: this.isPrivileged() },
       resources: { cpuModel: cpuList[0]?.model ?? 'unknown', cpuCount: cpuList.length, totalMemoryBytes: totalmem(), freeMemoryBytes: freemem(), disk },
       runtimes: { node: process.version, electron: process.versions.electron, npm: process.env.npm_config_user_agent?.match(/npm\/([^\s]+)/)?.[1] },
       tools: await this.detectTools(),

@@ -29,3 +29,5 @@ server.registerPrompt('greet', {
 }))
 
 await server.connect(new StdioServerTransport())
+
+if (process.env.FIXTURE_EXIT_MS) setTimeout(() => process.exit(0), Number(process.env.FIXTURE_EXIT_MS))

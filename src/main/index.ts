@@ -134,7 +134,8 @@ function registerIpc(current: Runtime): void {
   handle('project:context', (_event, id: string) => current.projects.context(id))
   handle('project:save-instructions', (_event, id: string, content: string) => current.projects.saveInstructions(id, content))
   handle('project:open', async (_event, id: string) => {
-    await shell.openPath(current.projects.get(id).path)
+    const result = await shell.openPath(current.projects.get(id).path)
+    if (result) throw new Error(result)
   })
   handle('gateway:start', async () => {
     await current.gateway.start()
@@ -191,7 +192,8 @@ function registerIpc(current: Runtime): void {
     return exported
   })
   handle('logs:open-directory', async () => {
-    await shell.openPath(current.logs.directory)
+    const result = await shell.openPath(current.logs.directory)
+    if (result) throw new Error(result)
   })
   handle('diagnostics:get', (_event, projectId?: string) => current.diagnostics(projectId))
   handle('diagnostics:export', async (_event, projectId?: string) => {

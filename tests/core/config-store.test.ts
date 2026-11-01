@@ -85,6 +85,20 @@ describe('ConfigStore', () => {
     expect(persisted.ui.theme).toBe('dark')
   })
 
+  it('reports asynchronous persistence failures without an unhandled rejection', async () => {
+    const store = new ConfigStore(filePath, protector)
+    await store.load()
+    const persistenceError = vi.fn()
+    store.on('persistence-error', persistenceError)
+    await rm(dirname(filePath), { recursive: true, force: true })
+    await writeFile(dirname(filePath), 'not a directory')
+
+    store.update({ ui: { theme: 'dark', startMinimized: false } })
+
+    await expect(store.flush()).rejects.toThrow()
+    expect(persistenceError).toHaveBeenCalledOnce()
+  })
+
   it('surfaces malformed configuration instead of silently replacing it', async () => {
     await new ConfigStore(filePath, protector).load()
     await writeFile(filePath, '{broken')

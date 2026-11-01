@@ -81,6 +81,9 @@ export class Runtime extends EventEmitter {
     this.store.on('change', () => {
       void this.proxy.detect().then(notify)
     })
+    this.store.on('persistence-error', (error: unknown) => {
+      this.logs.error({ category: 'config', action: 'config.persistence_failed', message: 'Could not persist application configuration', origin: 'system', data: { error: errorMessage(error) } })
+    })
     this.shell.on('change', notify)
     this.hub.on('change', notify)
     this.proxy.on('change', notify)

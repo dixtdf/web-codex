@@ -474,6 +474,11 @@ export class ShellService extends EventEmitter {
     }
     child.stdout?.on('data', (chunk: Buffer) => append('stdout', chunk))
     child.stderr?.on('data', (chunk: Buffer) => append('stderr', chunk))
+    child.stdin?.on('error', (error) => {
+      task.stdinOpen = false
+      this.logger?.warn({ category: 'shell', action: 'shell.stdin_error', message: 'Task standard input closed with an error', projectId: task.projectId, taskId: id, data: { error: error.message } })
+      this.emit('change', publicTask(task))
+    })
     child.on('error', (error) => {
       append('stderr', error.message)
       task.status = 'failed'
@@ -512,7 +517,9 @@ export class ShellService extends EventEmitter {
           append('stderr', `\nTask timed out after ${input.timeoutMs}ms`)
           task.stateReason = `Timed out after ${input.timeoutMs}ms`
           this.logger?.warn({ category: 'shell', action: 'shell.timeout', message: `Task timed out after ${input.timeoutMs}ms`, projectId: task.projectId, taskId: id, data: { command: task.command, timeoutMs: input.timeoutMs } })
-          void this.stop(id)
+          void this.stop(id).catch((error: unknown) => {
+            this.logger?.error({ category: 'shell', action: 'shell.stop_failed', message: 'Failed to stop timed out task', projectId: task.projectId, taskId: id, data: { error: error instanceof Error ? error.message : String(error) } })
+          })
         }
       }, Math.min(input.timeoutMs, 86_400_000))
     }

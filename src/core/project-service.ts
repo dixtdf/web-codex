@@ -14,6 +14,10 @@ export interface ProjectInput {
   createDirectory?: boolean
 }
 
+function sameProjectPath(left: string, right: string): boolean {
+  return process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right
+}
+
 export class ProjectService {
   constructor(private readonly store: ConfigStore) {}
 
@@ -55,7 +59,7 @@ export class ProjectService {
     const canonicalPath = await realpath(requestedPath)
     const config = this.store.get()
     assertCondition(
-      !config.projects.some((item) => item.path.toLowerCase() === canonicalPath.toLowerCase()),
+      !config.projects.some((item) => sameProjectPath(item.path, canonicalPath)),
       'This folder is already registered',
       'PROJECT_ALREADY_EXISTS'
     )
@@ -92,7 +96,7 @@ export class ProjectService {
     }
     const config = this.store.get()
     assertCondition(
-      !config.projects.some((item) => item.id !== id && item.path.toLowerCase() === nextPath.toLowerCase()),
+      !config.projects.some((item) => item.id !== id && sameProjectPath(item.path, nextPath)),
       'This folder is already registered',
       'PROJECT_ALREADY_EXISTS'
     )
@@ -111,11 +115,14 @@ export class ProjectService {
   async root(id: string): Promise<string> {
     const project = this.get(id)
     assertCondition(project.enabled, 'Project is disabled', 'PROJECT_DISABLED')
-    return realpath(project.path)
+    const root = await realpath(project.path)
+    const info = await stat(root)
+    assertCondition(info.isDirectory(), 'Project path is no longer a directory', 'PROJECT_NOT_DIRECTORY')
+    return root
   }
 
   private async instructionPath(project: Project, filename: string): Promise<string> {
-    const root = await realpath(project.path)
+    const root = await this.root(project.id)
     const target = resolve(root, filename)
     const assertInside = (candidate: string): void => {
       const pathFromRoot = relative(root, candidate)

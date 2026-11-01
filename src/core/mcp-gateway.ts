@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http'
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
-import express, { type Express, type Request, type Response } from 'express'
+import express, { type Express, type NextFunction, type Request, type Response } from 'express'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
@@ -693,6 +693,17 @@ export class McpGateway {
     }
     app.get('/mcp', methodNotAllowed)
     app.delete('/mcp', methodNotAllowed)
+    app.use('/mcp', (error: unknown, _req: Request, res: Response, next: NextFunction) => {
+      if (res.headersSent) {
+        next(error)
+        return
+      }
+      const candidate = error as { status?: number; type?: string }
+      const malformedJson = candidate?.type === 'entity.parse.failed'
+      const status = malformedJson ? 400 : candidate?.status === 413 ? 413 : 500
+      this.dependencies.logger?.warn({ category: 'gateway', action: 'gateway.request_rejected', message: malformedJson ? 'Rejected malformed MCP JSON request' : 'Rejected invalid MCP HTTP request', origin: 'remote', data: { status, error: errorMessage(error) } })
+      res.status(status).json({ jsonrpc: '2.0', error: { code: malformedJson ? -32700 : -32600, message: malformedJson ? 'Parse error: invalid JSON request body' : status === 413 ? 'Request body too large' : 'Invalid request' }, id: null })
+    })
     app.use((req, res) => {
       this.dependencies.logger?.debug({ category: 'gateway', action: 'gateway.route_not_found', message: `MCP route not found: ${req.method} ${req.path}`, origin: 'remote', data: { method: req.method, path: req.path } })
       res.status(404).end()

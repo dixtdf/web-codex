@@ -7,7 +7,7 @@ import express from 'express'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ActivityLogger } from '../../src/core/activity-logger'
 import { ConfigStore } from '../../src/core/config-store'
 import { McpHub } from '../../src/core/mcp-hub'
@@ -99,10 +99,30 @@ describe('McpHub transports', () => {
     await expect(hub.getPrompt(config.id, 'greet', { name: 'Codex' })).resolves.toMatchObject({ messages: [expect.objectContaining({ content: expect.objectContaining({ text: 'Hello Codex' }) })] })
     await expect(hub.getPrompt('missing', 'greet')).rejects.toMatchObject({ code: 'MCP_SERVER_NOT_FOUND' })
 
+    await hub.save({ ...config, enabled: false })
+    expect(hub.states()).toEqual([expect.objectContaining({ id: config.id, enabled: false, connected: false })])
+    expect(hub.listTools()).toEqual([])
+    await expect(hub.connect(config.id)).rejects.toMatchObject({ code: 'MCP_SERVER_DISABLED' })
     await hub.disconnect(config.id)
     expect(hub.states()).toEqual([expect.objectContaining({ connected: false })])
     await expect(hub.callTool('local__echo', {})).rejects.toMatchObject({ code: 'MCP_TOOL_NOT_FOUND' })
     expect(await hub.listResources()).toEqual([])
+  })
+
+  it('stops advertising tools after the underlying transport closes', async () => {
+    const fixturePath = fileURLToPath(new URL('../fixtures/stdio-mcp-server.mjs', import.meta.url))
+    const config = await hub.save(stdioConfig({
+      alias: 'closing',
+      command: process.execPath,
+      args: [fixturePath],
+      env: { FIXTURE_EXIT_MS: '100' }
+    }))
+    await hub.connect(config.id)
+    expect(hub.listTools()).toHaveLength(1)
+
+    await vi.waitFor(() => expect(hub.states()[0]?.connected).toBe(false))
+
+    expect(hub.listTools()).toEqual([])
   })
 
   it('discovers and calls Streamable HTTP tools through the proxy-aware fetch path', async () => {

@@ -67,6 +67,8 @@ describe('proxy parsing and bypass rules', () => {
     expect(shouldBypassProxy('not a url', '*')).toBe(false)
     expect(shouldBypassProxy('http://localhost:32180', '')).toBe(true)
     expect(shouldBypassProxy('http://127.0.0.1', '')).toBe(true)
+    expect(shouldBypassProxy('http://127.0.0.2:32180', '')).toBe(true)
+    expect(shouldBypassProxy('http://127.255.255.254', '')).toBe(true)
     expect(shouldBypassProxy('http://[::1]:32180', '')).toBe(true)
     expect(shouldBypassProxy('https://example.com', '*')).toBe(true)
     expect(shouldBypassProxy('https://api.example.com', '.example.com')).toBe(true)

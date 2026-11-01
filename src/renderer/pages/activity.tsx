@@ -109,6 +109,10 @@ export function ActivityPage({ config, runtime, notify }: PageProps) {
   const [command, setCommand] = useState('')
   const [busy, setBusy] = useState(false)
 
+  useEffect(() => {
+    if (!config.projects.some((project) => project.id === projectId)) setProjectId(config.projects[0]?.id ?? '')
+  }, [config.projects, projectId])
+
   const run = async (event: FormEvent): Promise<void> => {
     event.preventDefault()
     setBusy(true)

@@ -1,5 +1,5 @@
 import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { tmpdir, uptime } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ConfigStore } from '../../src/core/config-store'
@@ -35,6 +35,7 @@ describe('HostService capabilities', () => {
     expect(capabilities.host).toMatchObject({ platform: process.platform, arch: process.arch, privileged: true, home: expect.any(String) })
     expect(capabilities.resources.cpuCount).toBeGreaterThan(0)
     expect(capabilities.resources.totalMemoryBytes).toBeGreaterThan(0)
+    expect(Math.abs(capabilities.host.uptimeSeconds - Math.round(uptime()))).toBeLessThanOrEqual(1)
     expect(capabilities.runtimes.node).toBe(process.version)
     expect(capabilities.tools.node).toEqual(expect.objectContaining({ available: true, path: expect.any(String) }))
     expect(capabilities.project).toMatchObject({ id: project.id, root: project.path, enabled: true, remoteShellMode: 'allow' })

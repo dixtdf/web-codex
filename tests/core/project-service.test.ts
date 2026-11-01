@@ -56,6 +56,14 @@ describe('ProjectService registration', () => {
     await expect(projects.create({ path: join(temporaryDirectory, 'absent'), createDirectory: false })).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
+  it.skipIf(process.platform !== 'linux')('allows distinct case-sensitive project paths on Linux', async () => {
+    const upper = await projects.create({ path: join(temporaryDirectory, 'CaseWorkspace') })
+    const lower = await projects.create({ path: join(temporaryDirectory, 'caseworkspace') })
+
+    expect(lower.id).not.toBe(upper.id)
+    expect(projects.list()).toHaveLength(2)
+  })
+
   it('reports live project health without changing the enabled registration state', async () => {
     const ready = await projects.create({ path: join(temporaryDirectory, 'ready') })
     const missing = await projects.create({ path: join(temporaryDirectory, 'missing') })
@@ -120,6 +128,15 @@ describe('ProjectService registration', () => {
 })
 
 describe('ProjectService agent instructions', () => {
+  it('blocks instruction reads and writes while a project is disabled', async () => {
+    const project = await projects.create({ path: join(temporaryDirectory, 'disabled-context'), enabled: false })
+    await writeFile(join(project.path, 'AGENTS.md'), 'private instructions')
+
+    await expect(projects.context(project.id)).rejects.toMatchObject({ code: 'PROJECT_DISABLED' })
+    await expect(projects.saveInstructions(project.id, 'changed')).rejects.toMatchObject({ code: 'PROJECT_DISABLED' })
+    await expect(readFile(join(project.path, 'AGENTS.md'), 'utf8')).resolves.toBe('private instructions')
+  })
+
   it('prefers AGENTS.md, falls back to agent.md, and handles projects without instructions', async () => {
     const project = await projects.create({ path: join(temporaryDirectory, 'context') })
     await expect(projects.context(project.id)).resolves.toMatchObject({ instructions: '', instructionFile: null })

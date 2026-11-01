@@ -180,6 +180,12 @@ try {
   const projectPath = await mkdtemp(join(tmpdir(), 'web-codex-ui-'))
   const projectId = await evaluate(`window.webCodex.createProject({ path: ${JSON.stringify(projectPath)}, name: 'UI Smoke Project' }).then((project) => project.id)`)
   report.checks.projectCreated = Boolean(projectId)
+  await navigate('任务活动', '任务与日志')
+  await evaluate(`document.querySelector('.page-actions button').click()`)
+  await waitFor(`document.querySelector('.modal select')?.value === ${JSON.stringify(projectId)}`)
+  report.checks.activityProjectSelection = true
+  await evaluate(`document.querySelector('.modal-header .icon-button').click()`)
+  await navigate('设置', '设置')
   try {
     await evaluate(`window.webCodex.saveProjectInstructions(${JSON.stringify(projectId)}, '# UI Smoke\\n\\n- Run tests')`)
     const context = await evaluate(`window.webCodex.getProjectContext(${JSON.stringify(projectId)})`)
