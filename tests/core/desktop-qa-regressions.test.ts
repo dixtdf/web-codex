@@ -39,6 +39,8 @@ describe('Desktop QA regressions', () => {
     expect(boundary.content).not.toContain('\uFFFD')
     expect(boundary.requestedOffset).toBe(5)
     expect(boundary.offset).toBeLessThanOrEqual(5)
+    expect(boundary.actualOffset).toBe(boundary.offset)
+    expect(boundary.bytes).toBe(Buffer.byteLength(boundary.content))
     expect(boundary.nextOffset).toBeGreaterThan(boundary.offset)
     expect(boundary.truncated).toBe(true)
 

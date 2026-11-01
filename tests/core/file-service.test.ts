@@ -160,6 +160,21 @@ describe('FileService search', () => {
     await expect(files.search(project.id, 'needle', { cursor: 'invalid' })).rejects.toMatchObject({ code: 'SEARCH_CURSOR_INVALID' })
   })
 
+  it('filters searches with include and exclude globs', async () => {
+    await files.write(project.id, 'src/keep.ts', 'needle')
+    await files.write(project.id, 'src/keep.test.ts', 'needle')
+    await files.write(project.id, 'src/skip.js', 'needle')
+    await files.write(project.id, 'docs/skip.md', 'needle')
+    await files.write(project.id, 'src/generated/skip.ts', 'needle')
+
+    const included = await files.search(project.id, 'needle', { includeGlobs: ['src/**/*.ts'] })
+    expect(included.matches.map((match) => match.path)).toHaveLength(3)
+    expect(included.matches.map((match) => match.path)).toEqual(expect.arrayContaining(['src/keep.ts', 'src/keep.test.ts', 'src/generated/skip.ts']))
+    const excluded = await files.search(project.id, 'needle', { includeGlobs: ['src/**/*.ts'], excludeGlobs: ['**/*.test.ts', 'src/generated/'] })
+    expect(excluded).toEqual({ matches: [{ path: 'src/keep.ts', line: 1, column: 1, preview: 'needle' }], nextCursor: null })
+    await expect(files.search(project.id, 'needle', { includeGlobs: [''] })).rejects.toMatchObject({ code: 'SEARCH_GLOB_INVALID' })
+  })
+
   it('skips binary and oversized files and validates search input', async () => {
     await files.write(project.id, 'small.txt', 'needle')
     await writeFile(join(projectRoot, 'large.txt'), `needle${'x'.repeat(1_000_001)}`)

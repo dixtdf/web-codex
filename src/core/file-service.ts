@@ -12,8 +12,10 @@ export interface FileReadResult {
   path: string
   content: string
   offset: number
-  nextOffset: number
+  actualOffset: number
   requestedOffset: number
+  nextOffset: number
+  bytes: number
   size: number
   truncated: boolean
   sha256: string
@@ -176,7 +178,7 @@ export class FileService {
     assertCondition(Number.isSafeInteger(offset) && offset >= 0, 'Invalid text read offset', 'FILE_OFFSET_INVALID')
     assertCondition(Number.isSafeInteger(maxBytes) && maxBytes > 0, 'maxBytes must be positive', 'FILE_LIMIT_INVALID')
     if (offset > info.size) {
-      return { path: relative(root, target).split(sep).join('/'), content: '', offset, nextOffset: offset, requestedOffset: offset, size: info.size, truncated: false, sha256: await hashFile(target) }
+      return { path: relative(root, target).split(sep).join('/'), content: '', offset, actualOffset: offset, requestedOffset: offset, nextOffset: offset, bytes: 0, size: info.size, truncated: false, sha256: await hashFile(target) }
     }
     const readStart = Math.max(0, offset - 3)
     const length = Math.max(0, Math.min(maxBytes + 7, info.size - readStart))
@@ -210,8 +212,10 @@ export class FileService {
       path: relative(root, target).split(sep).join('/'),
       content: text,
       offset: actualOffset,
-      nextOffset,
+      actualOffset,
       requestedOffset: offset,
+      nextOffset,
+      bytes: content.length,
       size: info.size,
       truncated: nextOffset < info.size,
       sha256: await hashFile(target)
@@ -478,7 +482,7 @@ export class FileService {
     return record
   }
 
-  async search(projectId: string, query: string, options: { path?: string; regex?: boolean; caseSensitive?: boolean; maxResults?: number; respectGitignore?: boolean; cursor?: string } = {}): Promise<{ matches: SearchMatch[]; nextCursor: string | null }> {
+  async search(projectId: string, query: string, options: { path?: string; regex?: boolean; caseSensitive?: boolean; maxResults?: number; respectGitignore?: boolean; cursor?: string; includeGlobs?: string[]; excludeGlobs?: string[] } = {}): Promise<{ matches: SearchMatch[]; nextCursor: string | null }> {
     assertCondition(query.length > 0, 'Search query is required', 'SEARCH_QUERY_REQUIRED')
     const { root, target } = await this.existingPath(projectId, options.path ?? '.')
     const flags = options.caseSensitive ? 'g' : 'gi'
@@ -499,6 +503,11 @@ export class FileService {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
       }
     }
+    const includeGlobs = options.includeGlobs ?? []
+    const excludeGlobs = options.excludeGlobs ?? []
+    assertCondition(includeGlobs.length <= 100 && excludeGlobs.length <= 100 && [...includeGlobs, ...excludeGlobs].every((pattern) => pattern.trim().length > 0), 'Search glob lists must contain at most 100 non-empty patterns', 'SEARCH_GLOB_INVALID')
+    const includeRules = includeGlobs.length > 0 ? ignore().add(includeGlobs) : null
+    const excludeRules = ignore().add(excludeGlobs)
     const relativePath = (absolute: string): string => relative(root, absolute).split(sep).join('/')
     const addMatch = (match: SearchMatch): void => {
       if (position >= offset && matches.length < maxResults) matches.push(match)
@@ -507,7 +516,7 @@ export class FileService {
     }
     const searchFile = async (absolute: string, applyIgnore: boolean): Promise<void> => {
       const path = relativePath(absolute)
-      if (hasMore || (applyIgnore && ignoreRules.ignores(path)) || binaryExtensions.has(extname(absolute).toLowerCase())) return
+      if (hasMore || (applyIgnore && ignoreRules.ignores(path)) || excludeRules.ignores(path) || (includeRules && !includeRules.ignores(path)) || binaryExtensions.has(extname(absolute).toLowerCase())) return
       const info = await stat(absolute)
       if (info.size > 1_000_000) return
       const content = await readFile(absolute, 'utf8')
@@ -529,7 +538,7 @@ export class FileService {
         const absolute = join(directory, entry.name)
         const relativeEntry = relativePath(absolute)
         if (entry.isDirectory()) {
-          if (!ignoredDirectories.has(entry.name) && !ignoreRules.ignores(`${relativeEntry}/`)) await visit(absolute)
+          if (!ignoredDirectories.has(entry.name) && !ignoreRules.ignores(`${relativeEntry}/`) && !excludeRules.ignores(`${relativeEntry}/`)) await visit(absolute)
         } else if (entry.isFile()) {
           await searchFile(absolute, true)
         }

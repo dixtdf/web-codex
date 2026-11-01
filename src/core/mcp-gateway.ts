@@ -131,7 +131,7 @@ export function createWorkspaceServer(dependencies: GatewayDependencies): McpSer
       name: z.string().optional(),
       enabled: z.boolean().default(true),
       createDirectory: z.boolean().default(true),
-      remoteShell: z.object({ mode: z.enum(['allow', 'allowlist', 'deny']).default('allow'), allowedPrefixes: z.array(z.string()).max(200).default([]) }).optional()
+      remoteShell: z.object({ mode: z.enum(['allow', 'allowlist', 'deny']).default('allow'), allowedPrefixes: z.array(z.string()).max(200).default([]) }).strict().optional()
     }
   }, async ({ path, name, enabled, createDirectory, remoteShell }) => result(await projects.create({ path, name, enabled, createDirectory, remoteShell })))
 
@@ -143,7 +143,7 @@ export function createWorkspaceServer(dependencies: GatewayDependencies): McpSer
       name: z.string().optional(),
       path: z.string().optional(),
       enabled: z.boolean().optional(),
-      remoteShell: z.object({ mode: z.enum(['allow', 'allowlist', 'deny']), allowedPrefixes: z.array(z.string()).max(200).default([]) }).optional()
+      remoteShell: z.object({ mode: z.enum(['allow', 'allowlist', 'deny']), allowedPrefixes: z.array(z.string()).max(200).default([]) }).strict().optional()
     }
   }, async ({ projectId, ...patch }) => result(await projects.update(projectId, patch)))
 
@@ -170,7 +170,7 @@ export function createWorkspaceServer(dependencies: GatewayDependencies): McpSer
 
   server.registerTool('file_read', {
     title: 'Read a project file',
-    description: 'Read UTF-8 text by byte offset. Chunks align to complete UTF-8 characters and return actual offset, nextOffset, size, truncation, and SHA-256. Continue with nextOffset when truncated.',
+    description: 'Read UTF-8 text by byte offset. Chunks align to complete UTF-8 characters and return requestedOffset, actualOffset, consumed bytes, nextOffset, size, truncation, and SHA-256. Continue with nextOffset when truncated.',
     inputSchema: {
       projectId: z.string(),
       path: z.string(),
@@ -201,7 +201,7 @@ export function createWorkspaceServer(dependencies: GatewayDependencies): McpSer
 
   server.registerTool('file_search', {
     title: 'Search project files',
-    description: 'Search text recursively while skipping dependencies, build outputs, binary files, and root .gitignore patterns. Returns matches and nextCursor; pass the cursor back with the same filters for the next page.',
+    description: 'Search text recursively with optional project-relative include/exclude globs. Skips dependencies, build outputs, binary files, and root .gitignore patterns. Returns matches and nextCursor; pass the cursor back with unchanged filters for the next page.',
     inputSchema: {
       projectId: z.string(),
       query: z.string(),
@@ -210,9 +210,11 @@ export function createWorkspaceServer(dependencies: GatewayDependencies): McpSer
       caseSensitive: z.boolean().default(false),
       maxResults: z.number().int().positive().max(1000).default(100),
       respectGitignore: z.boolean().default(true),
-      cursor: z.string().optional()
+      cursor: z.string().optional(),
+      includeGlobs: z.array(z.string().min(1)).max(100).optional(),
+      excludeGlobs: z.array(z.string().min(1)).max(100).optional()
     }
-  }, async ({ projectId, query, path, regex, caseSensitive, maxResults, respectGitignore, cursor }) => result(await files.search(projectId, query, { path, regex, caseSensitive, maxResults, respectGitignore, cursor })))
+  }, async ({ projectId, query, path, regex, caseSensitive, maxResults, respectGitignore, cursor, includeGlobs, excludeGlobs }) => result(await files.search(projectId, query, { path, regex, caseSensitive, maxResults, respectGitignore, cursor, includeGlobs, excludeGlobs })))
 
   server.registerTool('file_mkdir', {
     title: 'Create a directory',

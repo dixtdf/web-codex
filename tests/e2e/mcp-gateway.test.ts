@@ -116,11 +116,22 @@ describe('MCP Gateway HTTP transport', () => {
       'mcp_server_list', 'mcp_tool_list', 'mcp_tool_call', 'mcp_resource_list', 'mcp_resource_read', 'mcp_prompt_list', 'mcp_prompt_get'
     ]))
     expect(new Set(names).size).toBe(names.length)
-    const deleteTool = listed.result?.tools?.find((tool) => tool.name === 'file_delete')
-    expect(deleteTool?.inputSchema?.additionalProperties).toBe(false)
-    expect(deleteTool?.inputSchema?.properties).toMatchObject({ dryRun: expect.any(Object), expectedSha256: expect.any(Object) })
-    const searchTool = listed.result?.tools?.find((tool) => tool.name === 'file_search')
-    expect(searchTool?.inputSchema?.properties).toHaveProperty('cursor')
+    const tools = listed.result?.tools ?? []
+    for (const tool of tools) expect(tool.inputSchema?.additionalProperties, tool.name).toBe(false)
+    const expectedArguments: Record<string, string[]> = {
+      file_write: ['expectedSha256'],
+      file_patch: ['expectedSha256', 'dryRun'],
+      file_move: ['overwrite', 'expectedSourceSha256', 'expectedDestinationSha256'],
+      file_delete: ['dryRun', 'expectedSha256'],
+      file_search: ['respectGitignore', 'cursor', 'includeGlobs', 'excludeGlobs'],
+      shell_task_list: ['projectId', 'status', 'limit', 'cursor'],
+      shell_task_output: ['taskId', 'stream', 'offset', 'maxBytes'],
+      shell_task_input: ['taskId', 'data', 'appendNewline']
+    }
+    for (const [name, arguments_] of Object.entries(expectedArguments)) {
+      const tool = tools.find((candidate) => candidate.name === name)
+      for (const argument of arguments_) expect(tool?.inputSchema?.properties, `${name}.${argument}`).toHaveProperty(argument)
+    }
   })
 
   it('reports host and connection health and exposes empty downstream resource collections', async () => {
@@ -146,7 +157,7 @@ describe('MCP Gateway HTTP transport', () => {
 
     await callTool(11, 'file_write', { path: 'docs/note.txt', content: 'from MCP' })
     await expect(readFile(join(project.path, 'docs', 'note.txt'), 'utf8')).resolves.toBe('from MCP')
-    await expect(callTool(12, 'file_read', { path: 'docs/note.txt' })).resolves.toMatchObject({ content: 'from MCP', truncated: false })
+    await expect(callTool(12, 'file_read', { path: 'docs/note.txt' })).resolves.toMatchObject({ content: 'from MCP', actualOffset: 0, requestedOffset: 0, nextOffset: 8, bytes: 8, truncated: false })
 
     const context = await callTool(13, 'project_context_get')
     expect(context).toMatchObject({ project: { id: project.id }, instructions: '', instructionFile: null })
@@ -231,6 +242,9 @@ describe('MCP Gateway HTTP transport', () => {
     const unknown = await rpc(98, 'tools/call', { name: 'file_delete', arguments: { projectId: project.id, path: 'protected.txt', dryRun: true, unexpectedOption: true } })
     expect(unknown.result?.isError).toBe(true)
     expect(unknown.result?.content?.[0]?.text).toContain('unexpectedOption')
+    const nestedUnknown = await rpc(104, 'tools/call', { name: 'project_update', arguments: { projectId: project.id, remoteShell: { mode: 'allow', allowedPrefixes: [], unexpectedOption: true } } })
+    expect(nestedUnknown.result?.isError).toBe(true)
+    expect(nestedUnknown.result?.content?.[0]?.text).toContain('unexpectedOption')
     await expect(callTool(99, 'file_read', { path: 'protected.txt' })).resolves.toMatchObject({ content: 'NEW' })
     await expect(callTool(100, 'file_delete', { path: 'protected.txt', expectedSha256: current.sha256, dryRun: true })).resolves.toMatchObject({ dryRun: true, trashId: null })
     await expect(callTool(101, 'file_read', { path: 'protected.txt' })).resolves.toMatchObject({ content: 'NEW' })

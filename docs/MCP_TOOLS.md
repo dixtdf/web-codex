@@ -2,7 +2,7 @@
 
 The local endpoint is `http://<loopback-host>:<port>/mcp` and requires Bearer authentication. Paths are project-relative unless stated otherwise. Call `project_list`, then `project_context_get` before project work. The current server exposes 58 tools.
 
-Responses normally contain JSON text and `structuredContent.result`. `file_download` also returns an inline MCP resource block. Tool failures return `isError=true` and a machine-readable `structuredContent.error` object with `code`, `message`, and optional `details`, so clients do not need to infer business errors from text alone. Workspace tool input objects are strict: unknown top-level arguments are rejected instead of being silently ignored.
+Responses normally contain JSON text and `structuredContent.result`. `file_download` also returns an inline MCP resource block. Tool failures return `isError=true` and a machine-readable `structuredContent.error` object with `code`, `message`, and optional `details`, so clients do not need to infer business errors from text alone. Workspace tool input objects are strict: unknown top-level arguments and unknown fields in nested `remoteShell` policies are rejected instead of being silently ignored.
 
 ## Projects
 
@@ -38,7 +38,7 @@ Arguments: `projectId`, optional `path` (default `.`). Returns file, directory, 
 
 ### `file_read`
 
-Arguments: `projectId`, `path`, optional `offset` and `maxBytes` (default `200000`, maximum `2000000`). Returns UTF-8 content, `requestedOffset`, actual `offset`, `nextOffset`, size, truncation state, and SHA-256. Continue with `nextOffset`; chunks never split a UTF-8 character. Binary files must use `file_read_binary`.
+Arguments: `projectId`, `path`, optional `offset` and `maxBytes` (default `200000`, maximum `2000000`). Returns UTF-8 content, `requestedOffset`, `actualOffset`, consumed `bytes`, `nextOffset`, size, truncation state, and SHA-256. The legacy `offset` field remains equal to `actualOffset`. Continue with `nextOffset`; chunks never split a UTF-8 character. Binary files must use `file_read_binary`.
 
 ### `file_write`
 
@@ -50,7 +50,7 @@ Arguments: `projectId`, `path`, `oldText`, `newText`, optional `expectedReplacem
 
 ### `file_search`
 
-Arguments: `projectId`, `query`, optional `path`, `regex`, `caseSensitive`, `maxResults` (default `100`, maximum `1000`), `respectGitignore` (default `true`), and `cursor`. Dependencies, build outputs, binary files, and files over 1 MB are skipped. Returns `{ matches, nextCursor }`; pass `nextCursor` with unchanged filters until it is `null`.
+Arguments: `projectId`, `query`, optional `path`, `regex`, `caseSensitive`, `maxResults` (default `100`, maximum `1000`), `respectGitignore` (default `true`), `cursor`, `includeGlobs`, and `excludeGlobs`. Glob lists accept up to 100 project-relative POSIX-style patterns each and compose with `.gitignore` and pagination. Dependencies, build outputs, binary files, and files over 1 MB are skipped. Returns `{ matches, nextCursor }`; pass `nextCursor` with unchanged filters until it is `null`.
 
 ### `file_mkdir`
 
@@ -135,6 +135,8 @@ Arguments: `uploadId`, `projectId`, optional `destinationPath` (default `.`). Sa
 ### `shell_run`
 
 Arguments: `projectId`, `command`, optional `shell` (`auto`, `cmd`, `powershell`, `bash`, `zsh`), `cwd`, `timeoutMs` (default `120000`, maximum `86400000`), `wait` (default `true`), and `idempotencyKey`. Remote execution is checked against the project policy. Commands have full desktop-user authority and can access outside the project; the working-directory boundary is not a sandbox. Windows cmd commands preserve quoted scripts correctly.
+
+PowerShell 5.1 compatibility: `file_write` creates UTF-8 without BOM, which Windows PowerShell 5.1 may misread with its default file encoding. Use `Get-Content -Raw -Encoding UTF8 -LiteralPath "测试 文件.txt"` for text files. Shell stdout/stderr UTF-8 encoding is configured separately and is not affected by this file-encoding default.
 
 ### `process_run`
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.1 - 2026-11-01 (local/unreleased; unsigned)
+
+### Added
+
+- File search supports up to 100 project-relative `includeGlobs` and `excludeGlobs`, composed with `.gitignore` handling and cursor pagination.
+- UTF-8 file reads explicitly return `actualOffset` and consumed `bytes` alongside the backward-compatible `offset` field.
+- MCP E2E schema checks cover every tool's strict input object and all safety/pagination parameters highlighted by Desktop QA, including nested remote-shell policy validation.
+- Documented PowerShell 5.1's need for explicit `-Encoding UTF8` when reading UTF-8 files without BOM.
+
 ## 0.5.0 - 2026-11-01 (local/unreleased; unsigned)
 
 ### Changed

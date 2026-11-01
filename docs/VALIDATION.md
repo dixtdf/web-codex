@@ -2,6 +2,17 @@
 
 ## 2026-10-31/2026-11-01 local release verification (UTC)
 
+### Desktop follow-up hardening (0.5.1)
+
+- `npm run lint` and `npm run typecheck`: passed.
+- `npx vitest run --coverage`: 20 test files, 150 tests passed (133 core/service + 17 MCP E2E); 93.46% lines, 81.30% branches, 90.86% functions (90.94% statements).
+- `npm run test:e2e`: 17 real MCP HTTP tests passed, including strict schemas for every tool, all QA-highlighted safety parameters, and nested remote-shell policy rejection.
+- `npm run test:tunnel`: official local control plane passed with version 0.5.1, 58 tools, `project_list`, and byte-identical `upload_copy`.
+- `npm run dist:win`: built unsigned, unpublished Windows x64, arm64, and combined 0.5.1 NSIS installers. Two online Electron download attempts timed out; the successful build reused the existing official Electron 45.2.1 x64/arm64 ZIP cache with `ELECTRON_BUILDER_OFFLINE=true`.
+- `npm run test:ui`: passed with `appVersion=0.5.1` against an isolated production Electron instance; all six pages, 58-tool discovery, typed IPC workflows, diagnostics, and runtime-error/layout checks passed.
+- Added regression coverage for include/exclude glob search, explicit UTF-8 `actualOffset`/`bytes`, and PowerShell 5.1 encoding documentation.
+- This 0.5.1 source is not pushed or published.
+
 ### Desktop deep-test follow-up (0.5.0)
 
 - `npm run lint` and `npm run typecheck`: passed.
