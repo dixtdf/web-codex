@@ -102,7 +102,8 @@ describe('interactive and structured processes', () => {
   })
 
   it.skipIf(process.platform === 'win32')('force-kills a process that ignores graceful termination', async () => {
-    const task = await shells.runProcess({ projectId: project.id, executable: process.execPath, args: ['-e', "process.on('SIGTERM', () => {});setInterval(() => {}, 1000)"], wait: false })
+    const task = await shells.runProcess({ projectId: project.id, executable: process.execPath, args: ['-e', "process.on('SIGTERM', () => {});setInterval(() => {}, 1000);process.stdout.write('ready\\n')"], wait: false })
+    await vi.waitFor(() => expect(shells.get(task.id).stdout).toContain('ready'))
 
     await expect(shells.stop(task.id)).resolves.toMatchObject({ id: task.id, status: 'stopped' })
     expect(shells.get(task.id)).toMatchObject({ status: 'stopped', signal: 'SIGKILL' })
