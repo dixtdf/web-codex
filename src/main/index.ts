@@ -273,8 +273,14 @@ const hasLock = app.requestSingleInstanceLock()
 if (!hasLock) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
-    void showMainWindow()
+  app.on('second-instance', (_event, commandLine) => {
+    runtime?.logs.info({
+      category: 'app',
+      action: 'app.second_instance',
+      message: 'Second instance launch ignored while running in background',
+      origin: 'system',
+      data: { argvCount: Array.isArray(commandLine) ? commandLine.length : 0 }
+    })
   })
   app.whenReady().then(async () => {
     if (process.platform !== 'darwin') Menu.setApplicationMenu(null)
