@@ -59,4 +59,4 @@ Use `docs/decisions/` for architectural decisions that affect future implementat
 
 ## Git policy
 
-Do not commit or push unless explicitly requested by the user in the current conversation. Do not commit secrets, local configuration, release artifacts, or `node_modules`.
+Commit and push after every completed development task (`AGENTS.md` authorizes this). Do not commit secrets, local configuration, release artifacts, or `node_modules`. A normal push runs only the CI matrix. To trigger the GitHub release matrix, bump the version in `package.json` and push a matching `v*` tag (`release.yml` packages and publishes the three-platform packages from tags).
